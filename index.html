@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>TI Retro: Robo de Capital $COP</title>
+<style>
+body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;flex-direction:column;align-items:center;}
+#ui-top{width:100%;max-width:650px;display:flex;align-items:center;gap:16px;padding:10px;background:#141414;border-bottom:1px solid #333;}
+#portraits{display:flex;gap:8px;}
+.portrait{width:50px;height:50px;background:#222;border:3px solid #444;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;}
+.portrait img{width:100%; height:100%; object-fit:cover;}
+.portrait.turn{border-color:#2d6cdf; box-shadow:0 0 10px rgba(45,108,223,.9)}
+.portrait.active{border-color:#f39c12;}
+#hp-panels{flex:1;display:flex;flex-direction:column;gap:6px;}
+.hp-row{display:flex;align-items:center;gap:8px;}
+.hp-row.active{background:rgba(243,156,18,0.2);border-radius:6px;padding:4px 6px;margin:-4px -6px;}
+.hp-name{font-size:11px;min-width:75px;font-weight:bold;color:#aaa;}
+.hp-row.active .hp-name{color:#f39c12;}
+.hp-bar{flex:1;height:12px;background:#2a2a2a;border-radius:6px;overflow:hidden;border:1px solid #444;}
+.hp-fill{height:100%;background:#2ecc71;transition:width 0.3s;}
+.hp-fill.kevin{background:#f39c12;}
+.hp-cop{font-size:11px;min-width:95px;text-align:right;font-weight:bold;color:#fff;}
+#stats{min-width:140px;text-align:right;font-size:12px; font-weight:bold; color:#f39c12;}
+#enemy-panels{display:flex;gap:8px;padding:8px;justify-content:center;width:100%;flex-wrap:wrap;}
+.enemy-card{background:#111;border:2px solid #e74c3c;border-radius:8px;padding:6px 10px;min-width:130px;text-align:center;font-size:10px;transition:all 0.3s;}
+.enemy-card.highlighted{border-color:#f39c12;box-shadow:0 0 15px rgba(243,156,18,0.8);transform:scale(1.05);}
+.cell.enemy-highlighted{box-shadow:inset 0 0 20px rgba(243,156,18,0.9);border:2px solid #f39c12 !important;}
+#grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;margin:10px auto;border:3px solid #333;padding:4px;background:#111;}
+.cell{width:52px;height:52px;background:#000;border:1px solid #2a5a2a;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
+.cell img{width:95%; height:95%; object-fit:contain; z-index:2;}
+.wall{background:#444;border-color:#222;cursor:default;}
+.move{background:#2d6cdf !important; opacity:0.8;}
+.spell{background:#f39c12 !important; opacity:0.8;}
+.heal-zone{background:#ff69b4 !important; opacity:0.7;}
+#spellbar{display:flex;gap:10px;background:#141414;padding:12px;border:1px solid #333;border-radius:12px;margin-bottom:10px;}
+.spellBtn{padding:8px; min-width:105px; background:#222;border:2px solid #555;border-radius:8px;color:white;cursor:pointer;font-size:10px;font-weight:bold;}
+.spellBtn:hover{border-color:#f39c12;}
+.selected{border-color:#f39c12!important; background:#4d3b1a;}
+#log{width:90%;max-width:650px;height:120px;overflow-y:auto;background:#000;border:1px solid #333;padding:8px;font-size:11px;color:#ccc;border-radius:8px;}
+.log-dmg{color:#ff4d4d;}
+.log-heal{color:#4dff4d;}
+#end-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.9);z-index:999;}
+.hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<div id="ui-top">
+  <div id="portraits"></div>
+  <div id="hp-panels"></div>
+  <div id="stats">
+    <div id="level-indicator" style="color:#f39c12; margin-bottom:4px;">NIVEL 1/4</div>
+    PA: <span id="pa">6</span> | PM: <span id="pm">3</span>
+  </div>
+</div>
+
+<div id="enemy-panels"></div>
+<div id="grid"></div>
+
+<div id="spellbar">
+    <div id="spells-inner" style="display:flex; gap:8px;"></div>
+    <button id="endTurnBtn" style="padding:8px 15px; cursor:pointer; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">PASAR TURNO</button>
+</div>
+
+<div id="log"></div>
+
+<div id="end-overlay" class="hidden">
+    <div style="background:#1b1b1b; padding:40px; border:2px solid #f39c12; text-align:center; border-radius:20px; max-width:400px;">
+        <h2 id="end-title"></h2>
+        <p id="end-msg"></p>
+        <div id="end-buttons"></div>
+    </div>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN $COP =====
+const fmt = (n) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
+const SIZE = 8;
+const MAX_LEVEL = 4;
+
+// Sistema de niveles
+let currentLevel = 1;
+const levelConfig = {
+    1: { enemies: 4, baseDmgMin: 451400, baseDmgMax: 633000, reward: 500000, enemyHp: 800000, enemyResist: 0.10 },
+    2: { enemies: 5, baseDmgMin: 550000, baseDmgMax: 750000, reward: 750000, enemyHp: 1200000, enemyResist: 0.15 },
+    3: { enemies: 6, baseDmgMin: 650000, baseDmgMax: 900000, reward: 1000000, enemyHp: 1800000, enemyResist: 0.20 },
+    4: { enemies: 8, baseDmgMin: 800000, baseDmgMax: 1100000, reward: 1500000, enemyHp: 2500000, enemyResist: 0.25 }
+};
+
+// HP base de los jugadores (para calcular recompensas)
+const baseHP = {
+    'J': 1750905,
+    'H': 1750905,
+    'K': 2626357.5
+};
+
+let players = [
+  {id:'J', name:'El Aleman', x:0,y:0, hp:1750905, maxHp:1750905, pa:6, pm:3, spells:['Puño','Insulto','Salto'], carried:null},
+  {id:'H', name:'H', x:0,y:0, hp:1750905, maxHp:1750905, pa:6, pm:3, spells:['Cargar','Lanzar','Empujon'], carried:null},
+  {id:'K', name:'El Joven', x:0,y:0, hp:2626357.5, maxHp:2626357.5, pa:6, pm:3, spells:['Credito','Uva','Atraco'], carried:null}
+];
+
+let enemies = [];
+let map = [];
+let activeIdx = 0;
+let uva = null;
+let uvaUsed = false; // Solo se puede invocar una vez por combate
+let enemyTurnActive = false;
+let selectedSpell = null;
+let isMoving = false;
+let activeEffects = []; // Sistema de efectos temporales: {target, type, value, turnsLeft}
+let highlightedEnemy = null; // Enemigo resaltado al hacer clic
+
+// ===== INICIALIZACIÓN =====
+function init(isNewLevel = false) {
+    // Generar mapa
+    map = Array.from({length:SIZE}, (_,y) => Array.from({length:SIZE}, (_,x) => {
+        if(x===0 || x===SIZE-1 || y===0 || y===SIZE-1) return 1;
+        return Math.random() < 0.12 ? 1 : 0;
+    }));
+
+    // Reset de variables de combate
+    enemies = [];
+    uva = null;
+    uvaUsed = false;
+    enemyTurnActive = false;
+    selectedSpell = null;
+    isMoving = false;
+    activeIdx = 0;
+    activeEffects = [];
+
+    // Posicionar jugadores y resetear PA/PM y limpiar buffs/debuffs
+    players.forEach(p => {
+        const pos = getEmptyPos();
+        p.x = pos.x;
+        p.y = pos.y;
+        p.pa = 6;
+        p.pm = 3;
+        p.carried = null;
+        // Limpiar todos los buffs/debuffs del combate anterior
+        delete p.dmgBoost;
+        delete p.resistance;
+        delete p.vulnerability;
+        // Si no es nivel nuevo, restaurar HP al máximo
+        if(!isNewLevel) {
+            p.hp = p.maxHp;
+        }
+    });
+
+    // Crear enemigos según el nivel
+    const config = levelConfig[currentLevel];
+    for(let i=0; i < config.enemies; i++) {
+        const pos = getEmptyPos();
+        enemies.push({
+            id:'D'+i,
+            name:'Escote '+(i+1),
+            x:pos.x,
+            y:pos.y,
+            hp: config.enemyHp,
+            maxHp: config.enemyHp * 5, // Pueden crecer hasta 5x robando
+            pa:3,
+            pm:2,
+            resistance: config.enemyResist // Resistencia al daño
+        });
+    }
+
+    log(`═══ NIVEL ${currentLevel}/${MAX_LEVEL} ═══`, 'log-heal');
+    log(`Escotes: ${config.enemies} | HP: ${fmt(config.enemyHp)} | Resistencia: ${Math.round(config.enemyResist*100)}%`);
+    log(`Daño enemigo: ${fmt(config.baseDmgMin)}-${fmt(config.baseDmgMax)}`);
+    log("¡Los Escotes roban capital al atacar! Protege a El Joven.");
+    draw();
+}
+
+function getEmptyPos() {
+    let x, y;
+    do { x = Math.floor(Math.random()*SIZE); y = Math.floor(Math.random()*SIZE); } 
+    while(map[y][x] === 1 || getEntityAt(x,y));
+    return {x, y};
+}
+
+function getEntityAt(x,y) {
+    const p = players.find(pl => pl.x===x && pl.y===y && pl.hp > 0);
+    if(p) return p;
+    const e = enemies.find(en => en.x===x && en.y===y && en.hp > 0);
+    if(e) return e;
+    if(uva && uva.x===x && uva.y===y && uva.hp > 0) return uva;
+    return null;
+}
+
+// ===== PATHFINDING =====
+function calculateReach(startX, startY, maxPM) {
+    let reachable = new Map();
+    let queue = [{x: startX, y: startY, dist: 0}];
+    let visited = new Set([`${startX},${startY}`]);
+    while(queue.length > 0) {
+        let curr = queue.shift();
+        if(curr.dist > 0) reachable.set(`${curr.x},${curr.y}`, curr.dist);
+        if(curr.dist < maxPM) {
+            for(let d of [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]) {
+                let nx=curr.x+d.x, ny=curr.y+d.y;
+                if(nx>=0 && nx<SIZE && ny>=0 && ny<SIZE && !visited.has(`${nx},${ny}`) && map[ny][nx]===0 && !getEntityAt(nx,ny)) {
+                    visited.add(`${nx},${ny}`); queue.push({x:nx, y:ny, dist:curr.dist+1});
+                }
+            }
+        }
+    }
+    return reachable;
+}
+
+// ===== DAÑO Y ROBO DE CAPITAL =====
+function applyDamage(target, amount, spellName, attacker) {
+    let finalDmg = amount;
+
+    // Buff de daño del atacante (Puño acumulable, Uva, etc.)
+    if(attacker.dmgBoost) {
+        const bonus = finalDmg * attacker.dmgBoost;
+        finalDmg += bonus;
+        log(`${attacker.name} tiene +${Math.round(attacker.dmgBoost*100)}% daño (+${fmt(bonus)})`, 'log-heal');
+    }
+
+    // Debilidad: El Joven recibe x2 de Escotes
+    if(target.id === 'K' && attacker.id.includes('D')) {
+        finalDmg *= 2;
+        log(`¡DEBILIDAD! El Joven pierde el doble de capital.`, 'log-dmg');
+    }
+
+    // Vulnerabilidad del objetivo (Insulto acumulable)
+    if(target.vulnerability) {
+        const extra = finalDmg * target.vulnerability;
+        finalDmg += extra;
+        log(`${target.name} es vulnerable: +${Math.round(target.vulnerability*100)}% daño recibido (+${fmt(extra)})`, 'log-dmg');
+    }
+
+    // Resistencia (reducen daño recibido)
+    if(target.resistance) {
+        const reduced = finalDmg * target.resistance;
+        finalDmg -= reduced;
+        log(`${target.name} resiste ${Math.round(target.resistance*100)}% (-${fmt(reduced)})`, 'log-heal');
+    }
+
+    target.hp -= finalDmg;
+
+    // REGLA: Escotes roban lo que quitan
+    if(attacker.id.includes('D')) {
+        attacker.hp += finalDmg;
+        log(`${attacker.name} robó ${fmt(finalDmg)} y aumentó su saldo.`, 'log-heal');
+    }
+
+    log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}`, 'log-dmg');
+
+    if(target.hp <= 0) {
+        target.hp = 0;
+        if(target.id === 'K') endGame("QUIEBRA DEL JOVEN", "El saldo de El Joven es $0. Has perdido.", false);
+        else if(target.id.includes('D')) {
+            log(`${target.name} fue liquidado.`);
+            enemies = enemies.filter(e => e.hp > 0);
+            if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
+        } else if(target.id === 'U') {
+            log("Uva 🐶 se ha ido."); uva = null;
+        }
+    }
+}
+
+// ===== DIBUJO =====
+function draw() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    const p = players[activeIdx];
+    let reachMap = isMoving ? calculateReach(p.x, p.y, p.pm) : new Map();
+
+    for(let y=0; y<SIZE; y++) {
+        for(let x=0; x<SIZE; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell' + (map[y][x]===1 ? ' wall' : '');
+            const ent = getEntityAt(x,y);
+            if(ent) {
+                const img = document.createElement('img');
+                if(ent.id === 'J') img.src = 'aleman.png';
+                else if(ent.id === 'H') img.src = 'h.png';
+                else if(ent.id === 'K') img.src = 'joven.png';
+                else if(ent.id.includes('D')) img.src = 'escote.png';
+                else if(ent.id === 'U') img.src = 'uva.png';
+                cell.appendChild(img);
+                // Resaltar enemigo seleccionado en el tablero
+                if(ent.id === highlightedEnemy) {
+                    cell.classList.add('enemy-highlighted');
+                }
+            }
+            if(isMoving && reachMap.has(`${x},${y}`)) cell.classList.add('move');
+            if(selectedSpell && checkSpellRange(x,y)) cell.classList.add('spell');
+            // Mostrar zona de curación rosada para Crédito
+            if(selectedSpell === 'Credito') {
+                const kevin = players.find(pl => pl.id === 'K');
+                if(kevin && Math.abs(kevin.x - x) + Math.abs(kevin.y - y) <= 1) {
+                    cell.classList.add('heal-zone');
+                }
+            }
+            cell.onclick = () => onCellClick(x,y, reachMap.get(`${x},${y}`));
+            grid.appendChild(cell);
+        }
+    }
+    updateUI();
+}
+
+function updateUI() {
+    const p = players[activeIdx];
+    document.getElementById('pa').textContent = p.pa;
+    document.getElementById('pm').textContent = p.pm;
+    document.getElementById('level-indicator').textContent = `NIVEL ${currentLevel}/${MAX_LEVEL}`;
+
+    // Renderizar barras de HP de todos los jugadores
+    const hpPanels = document.getElementById('hp-panels');
+    hpPanels.innerHTML = '';
+    players.forEach((pl, i) => {
+        if(pl.hp <= 0) return;
+        const row = document.createElement('div');
+        row.className = `hp-row ${i === activeIdx ? 'active' : ''}`;
+        const pct = Math.max(0, (pl.hp / pl.maxHp) * 100);
+        // Mostrar buffs/debuffs activos
+        let buffs = '';
+        if(pl.dmgBoost) buffs += `<span style="color:#4dff4d;">+${Math.round(pl.dmgBoost*100)}%DMG</span> `;
+        if(pl.resistance) buffs += `<span style="color:#3498db;">+${Math.round(pl.resistance*100)}%RES</span> `;
+        if(pl.vulnerability) buffs += `<span style="color:#e74c3c;">-${Math.round(pl.vulnerability*100)}%DEF</span> `;
+
+        row.innerHTML = `
+            <span class="hp-name">${pl.name}</span>
+            <div class="hp-bar">
+                <div class="hp-fill ${pl.id === 'K' ? 'kevin' : ''}" style="width:${pct}%"></div>
+            </div>
+            <span class="hp-cop">${fmt(pl.hp)}</span>
+            <span style="font-size:9px; min-width:50px; text-align:center;">PA:${pl.pa} PM:${pl.pm}</span>
+            <span style="font-size:8px; min-width:60px;">${buffs}</span>
+        `;
+        hpPanels.appendChild(row);
+    });
+
+    const ports = document.getElementById('portraits');
+    ports.innerHTML = '';
+    const spriteMap = {'J': 'aleman.png', 'H': 'h.png', 'K': 'joven.png'};
+    players.forEach((pl, i) => {
+        if(pl.hp <= 0) return;
+        const div = document.createElement('div');
+        div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''}`;
+        const img = document.createElement('img'); img.src = spriteMap[pl.id];
+        div.appendChild(img);
+        div.onclick = () => { if(!enemyTurnActive){ activeIdx=i; resetActions(); draw(); }};
+        ports.appendChild(div);
+    });
+
+    const sBar = document.getElementById('spells-inner');
+    sBar.innerHTML = '';
+    p.spells.forEach(s => {
+        const btn = document.createElement('button');
+        btn.className = `spellBtn ${selectedSpell===s?'selected':''}`;
+        btn.textContent = s;
+        btn.onclick = () => { if(!enemyTurnActive){ selectedSpell=(selectedSpell===s?null:s); isMoving=false; draw(); }};
+        sBar.appendChild(btn);
+    });
+
+    const ePanel = document.getElementById('enemy-panels');
+    ePanel.innerHTML = '';
+    enemies.forEach(e => {
+        const div = document.createElement('div');
+        div.className = `enemy-card${highlightedEnemy === e.id ? ' highlighted' : ''}`;
+        // Mostrar buffs/debuffs
+        let buffs = '';
+        if(e.dmgBoost) buffs += `<span style="color:#4dff4d;">+${Math.round(e.dmgBoost*100)}%DMG</span> `;
+        if(e.resistance) buffs += `<span style="color:#3498db;">${Math.round(e.resistance*100)}%RES</span> `;
+        if(e.vulnerability) buffs += `<span style="color:#ff6b6b;">-${Math.round(e.vulnerability*100)}%DEF</span> `;
+        div.innerHTML = `
+            <b>${e.name}</b><br>
+            <span style="color:#f39c12;">${fmt(e.hp)}</span><br>
+            <span style="font-size:9px; color:#aaa;">PA:${e.pa} PM:${e.pm}</span><br>
+            <span style="font-size:8px;">${buffs || '<span style="color:#666;">-</span>'}</span>
+        `;
+        // Clic en tarjeta también resalta/deselecciona
+        div.onclick = () => {
+            highlightedEnemy = (highlightedEnemy === e.id) ? null : e.id;
+            draw();
+        };
+        div.style.cursor = 'pointer';
+        ePanel.appendChild(div);
+    });
+}
+
+function resetActions() { isMoving = false; selectedSpell = null; }
+
+function onCellClick(x,y, cost) {
+    if(enemyTurnActive) return;
+    const p = players[activeIdx];
+
+    // Verificar si hizo clic en un enemigo para resaltarlo
+    const clickedEnemy = enemies.find(e => e.x === x && e.y === y && e.hp > 0);
+    if(clickedEnemy && !selectedSpell) {
+        // Toggle: si ya está resaltado, quitarlo; si no, resaltarlo
+        highlightedEnemy = (highlightedEnemy === clickedEnemy.id) ? null : clickedEnemy.id;
+        draw();
+        // No retornar si hay hechizo para poder atacar
+        if(!selectedSpell) return;
+    }
+
+    // Verificar si hizo clic en algún jugador para seleccionarlo
+    const clickedPlayer = players.find(pl => pl.x === x && pl.y === y && pl.hp > 0);
+    if(clickedPlayer && clickedPlayer !== p) {
+        // Si no hay hechizo seleccionado, cambiar al personaje clickeado
+        if(!selectedSpell) {
+            const newIdx = players.indexOf(clickedPlayer);
+            if(newIdx !== -1) {
+                activeIdx = newIdx;
+                highlightedEnemy = null; // Limpiar resaltado
+                resetActions();
+                draw();
+                return;
+            }
+        }
+    }
+
+    // Si hay un hechizo seleccionado que se puede usar en la propia casilla (como Credito)
+    if(selectedSpell && x === p.x && y === p.y && checkSpellRange(x,y)) {
+        executeSpell(x,y);
+        return;
+    }
+
+    // Clic en el personaje activo: activar modo movimiento
+    if(x === p.x && y === p.y) { isMoving = !isMoving; selectedSpell = null; draw(); return; }
+    if(isMoving && cost !== undefined) {
+        p.x = x; p.y = y; p.pm -= cost;
+        if(p.carried) { p.carried.x = x; p.carried.y = y; } // Mover al cargado
+        isMoving = false; draw(); return;
+    }
+    if(selectedSpell && checkSpellRange(x,y)) executeSpell(x,y);
+}
+
+function checkSpellRange(x,y) {
+    const p = players[activeIdx];
+    const d = Math.abs(p.x-x) + Math.abs(p.y-y);
+    if(selectedSpell === 'Credito') return d === 0;
+    if(['Puño','Empujon','Cargar'].includes(selectedSpell)) return d === 1;
+    // Uva: adyacente para invocar O donde está Uva para intercambiar
+    if(selectedSpell === 'Uva') {
+        if(uva && uva.x === x && uva.y === y) return true; // Intercambiar con Uva
+        return d === 1 && !uvaUsed; // Invocar (solo si no ha sido invocada)
+    }
+    if(selectedSpell === 'Insulto') return (p.x===x || p.y===y) && d <= 3 && d > 0;
+    if(selectedSpell === 'Salto') return d === 4 && !getEntityAt(x,y) && map[y][x]===0;
+    // Atraco: SOLO diagonales (1 casilla)
+    if(selectedSpell === 'Atraco') {
+        const dx = Math.abs(p.x - x);
+        const dy = Math.abs(p.y - y);
+        return (dx === 1 && dy === 1); // Solo diagonal
+    }
+    if(selectedSpell === 'Lanzar') return p.carried && d <= 4 && !getEntityAt(x,y) && map[y][x]===0;
+    return false;
+}
+
+function executeSpell(x,y) {
+    const p = players[activeIdx];
+    const target = getEntityAt(x,y);
+    if(p.pa < 3) return;
+
+    // DAÑOS: Puño (600k-800k) > Empujón (450k-600k) > Insulto/Atraco (300k-450k)
+    if(selectedSpell === 'Puño') {
+        if(target && target !== p) {
+            applyDamage(target, 600000 + Math.random()*200000, selectedSpell, p);
+            // Buff: El Alemán gana +5% daño acumulable por 2 turnos
+            addEffect(p, 'dmgBoost', 0.05, 2);
+            log(`${p.name} se enfurece: +5% daño por 2 turnos!`, 'log-heal');
+        }
+    }
+    else if(selectedSpell === 'Insulto') {
+        if(target && target !== p) {
+            // Solo se puede insultar una vez a cada objetivo
+            if(target.insulted) {
+                log(`${target.name} ya fue insultado. No puedes insultarlo de nuevo.`, 'log-dmg');
+                selectedSpell = null; draw(); return;
+            }
+            applyDamage(target, 300000 + Math.random()*150000, selectedSpell, p);
+            // Debuff: objetivo recibe +5% daño acumulable por 2 turnos
+            addEffect(target, 'vulnerability', 0.05, 2);
+            target.insulted = true; // Marcar como insultado
+            log(`${target.name} está debilitado: +5% daño recibido por 2 turnos!`, 'log-dmg');
+            p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA, no 3
+        }
+    }
+    else if(selectedSpell === 'Atraco') {
+        if(target && target !== p) {
+            const dmg = 300000 + Math.random()*150000;
+            applyDamage(target, dmg, selectedSpell, p);
+            // Kevin recupera 10% del daño infligido
+            const kevin = players.find(pl => pl.id === 'K');
+            const recovered = dmg * 0.10;
+            kevin.hp = Math.min(kevin.maxHp, kevin.hp + recovered);
+            log(`${kevin.name} recupera ${fmt(recovered)} del atraco!`, 'log-heal');
+        }
+    }
+    else if(selectedSpell === 'Empujon') {
+        if(target && target !== p) {
+            const isAlly = players.includes(target);
+            const dx = target.x - p.x;
+            const dy = target.y - p.y;
+            let pushed = 0;
+            let collision = false;
+
+            // Verificar si ya está contra la pared
+            const firstX = target.x + dx;
+            const firstY = target.y + dy;
+            const againstWall = (firstX < 0 || firstX >= SIZE || firstY < 0 || firstY >= SIZE ||
+                                 map[firstY][firstX] === 1 || getEntityAt(firstX, firstY));
+
+            if(isAlly) {
+                // Empujón sobre aliado: empuja + buff de daño
+                if(!againstWall) {
+                    // Intentar empujar 2 casillas
+                    for(let i = 1; i <= 2; i++) {
+                        const nx = target.x + dx * i;
+                        const ny = target.y + dy * i;
+                        if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) break;
+                        if(map[ny][nx] === 1) break;
+                        if(getEntityAt(nx, ny)) break;
+                        pushed = i;
+                    }
+                    if(pushed > 0) {
+                        target.x = target.x + dx * pushed;
+                        target.y = target.y + dy * pushed;
+                        log(`${target.name} fue impulsado ${pushed} casilla(s)!`, 'log-heal');
+                    }
+                }
+                // Buff de daño +10% este turno
+                target.dmgBoost = (target.dmgBoost || 0) + 0.10;
+                log(`${p.name} motiva a ${target.name}: +10% daño este turno!`, 'log-heal');
+            } else {
+                // Empujón sobre enemigo: daño por colisión
+                if(againstWall) {
+                    const wallDmg = 600000 + Math.random()*200000;
+                    applyDamage(target, wallDmg, "Empujon (APLASTADO)", p);
+                    log(`${target.name} fue APLASTADO contra la pared!`, 'log-dmg');
+                } else {
+                    for(let i = 1; i <= 2; i++) {
+                        const nx = target.x + dx * i;
+                        const ny = target.y + dy * i;
+                        if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) { collision = true; break; }
+                        if(map[ny][nx] === 1) { collision = true; break; }
+                        if(getEntityAt(nx, ny)) { collision = true; break; }
+                        pushed = i;
+                    }
+
+                    if(pushed > 0) {
+                        target.x = target.x + dx * pushed;
+                        target.y = target.y + dy * pushed;
+
+                        if(collision) {
+                            const collisionDmg = 350000 + Math.random()*150000;
+                            applyDamage(target, collisionDmg, "Empujon (colisión)", p);
+                            log(`${target.name} fue empujado ${pushed} casilla(s) y CHOCÓ!`, 'log-dmg');
+                        } else {
+                            log(`${target.name} fue empujado ${pushed} casilla(s).`);
+                        }
+                    }
+                }
+            }
+        }
+    } 
+    else if(selectedSpell === 'Credito') {
+        const heal = 390621;
+        // Kevin siempre recibe la curación
+        const kevin = players.find(pl => pl.id === 'K');
+        kevin.hp = Math.min(kevin.maxHp, kevin.hp + heal);
+        log(`${kevin.name} recibe consignación: +${fmt(heal)}`, 'log-heal');
+        // Aliados adyacentes a Kevin también reciben
+        players.forEach(pl => {
+            if(pl.id !== 'K' && pl.hp > 0 && Math.abs(kevin.x-pl.x)+Math.abs(kevin.y-pl.y) <= 1) {
+                pl.hp = Math.min(pl.maxHp, pl.hp + heal);
+                log(`${pl.name} recibe consignación: +${fmt(heal)}`, 'log-heal');
+            }
+        });
+    } 
+    else if(selectedSpell === 'Uva') {
+        // Si Uva está en la celda objetivo, intercambiar posición
+        if(uva && uva.x === x && uva.y === y) {
+            const oldX = p.x, oldY = p.y;
+            p.x = uva.x; p.y = uva.y;
+            uva.x = oldX; uva.y = oldY;
+            log(`${p.name} intercambió posición con Uva 🐶!`, 'log-heal');
+        } else {
+            // Invocar Uva por primera vez
+            if(uvaUsed) {
+                log("¡Uva 🐶 ya fue invocada este combate! No puede volver.", 'log-dmg');
+                selectedSpell = null; draw(); return;
+            }
+            uva = {id:'U', name:'Uva 🐶', x, y, hp:800000, maxHp:800000};
+            uvaUsed = true;
+            log("¡Uva 🐶 ENTE DEL CAOS ha entrado al mapa! ¿Qué hará?");
+        }
+    }
+    else if(selectedSpell === 'Salto') {
+        p.x = x; p.y = y;
+        p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA, no 3
+    }
+    else if(selectedSpell === 'Cargar') {
+        if(target && target !== p) { p.carried = target; log(`${p.name} cargó a ${target.name}`); }
+    }
+    else if(selectedSpell === 'Lanzar') {
+        if(p.carried) { 
+            p.carried.x = x; p.carried.y = y; 
+            log(`${p.name} lanzó a ${p.carried.name}`); 
+            p.carried = null; 
+        }
+    }
+    
+    p.pa -= 3; selectedSpell = null; draw();
+}
+
+// ===== TURNO ESCOTES + UVA =====
+document.getElementById('endTurnBtn').onclick = () => { if(!enemyTurnActive) startEnemyTurn(); };
+
+function startEnemyTurn() {
+    enemyTurnActive = true; resetActions();
+    log("Turno de los Escotes... ¡Cerrando cuentas!");
+    draw();
+
+    setTimeout(() => {
+        // Copiar array para evitar problemas si se elimina un Escote durante la iteración
+        const activeEnemies = enemies.filter(e => e.hp > 0);
+        activeEnemies.forEach(e => {
+            if(e.hp <= 0) return; // Verificar de nuevo por si murió
+            const alivePlayers = players.filter(pl => pl.hp > 0);
+            if(alivePlayers.length === 0) return;
+            const elJoven = alivePlayers.find(pl => pl.id === 'K');
+            let target = (elJoven && Math.abs(e.x-elJoven.x)+Math.abs(e.y-elJoven.y) <= 4) ? elJoven : alivePlayers[0];
+            if(!target) return;
+
+            // Movimiento
+            for(let i=0; i<e.pm; i++) {
+                if(Math.abs(e.x-target.x)+Math.abs(e.y-target.y) <= 1) break;
+                let reach = calculateReach(e.x, e.y, 1);
+                let best = {x:e.x, y:e.y, d:999};
+                for(let key of reach.keys()) {
+                    let [nx, ny] = key.split(',').map(Number);
+                    let d = Math.abs(nx-target.x)+Math.abs(ny-target.y);
+                    if(d < best.d) best = {x:nx, y:ny, d:d};
+                }
+                e.x = best.x; e.y = best.y;
+            }
+
+            // Calcular distancia al objetivo
+            const distToTarget = Math.abs(e.x-target.x)+Math.abs(e.y-target.y);
+            const config = levelConfig[currentLevel];
+
+            // PRIORIDAD: "Hola perdido!" (cuerpo a cuerpo) - siempre intentar primero
+            if(distToTarget <= 1) {
+                const baseDmg = config.baseDmgMin + Math.random() * (config.baseDmgMax - config.baseDmgMin);
+                applyDamage(target, baseDmg, "Hola perdido!", e);
+                // 30% probabilidad de quitar 1 PA para el próximo turno
+                if(Math.random() < 0.3) {
+                    target.paPenalty = (target.paPenalty || 0) + 1;
+                    log(`${e.name} confunde a ${target.name}: -1 PA próximo turno!`, 'log-dmg');
+                }
+            }
+            // SECUNDARIO: "Ya no saludas" (distancia) - solo si no alcanza con Hola perdido
+            // Hace daño bajo (16490-22150) + debuff + atrae si está en línea recta
+            else if(distToTarget <= 4) {
+                const lowDmg = 16490 + Math.random() * (22150 - 16490);
+                applyDamage(target, lowDmg, "Ya no saludas", e);
+
+                // Si está en línea recta (misma fila o columna), atraer 1 casilla
+                if(e.x === target.x || e.y === target.y) {
+                    const dx = Math.sign(e.x - target.x); // Dirección hacia el Escote
+                    const dy = Math.sign(e.y - target.y);
+                    const newX = target.x + dx;
+                    const newY = target.y + dy;
+                    // Verificar que la casilla destino esté libre
+                    if(newX >= 0 && newX < SIZE && newY >= 0 && newY < SIZE &&
+                       map[newY][newX] === 0 && !getEntityAt(newX, newY)) {
+                        target.x = newX;
+                        target.y = newY;
+                        log(`${e.name} atrae a ${target.name} 1 casilla!`, 'log-dmg');
+                    }
+                }
+
+                // Puede: quitar 1 PM (35%), quitar 1 PA (35%), o nada (30%)
+                const roll = Math.random();
+                if(roll < 0.35) {
+                    target.pmPenalty = (target.pmPenalty || 0) + 1;
+                    log(`${target.name} queda paralizado: -1 PM próximo turno!`, 'log-dmg');
+                } else if(roll < 0.70) {
+                    target.paPenalty = (target.paPenalty || 0) + 1;
+                    log(`${target.name} queda confundido: -1 PA próximo turno!`, 'log-dmg');
+                } else {
+                    log(`${target.name} ignora el efecto secundario.`);
+                }
+            }
+        });
+
+        if(uva) actUva();
+
+        if(players.find(pl=>pl.id==='K').hp > 0) {
+            // Reset PA/PM y aplicar penalizaciones pendientes de este turno
+            players.forEach(pl => {
+                if(pl.hp > 0) {
+                    // Aplicar penalizaciones de Escotes (guardadas durante el turno)
+                    const paPenalty = pl.paPenalty || 0;
+                    const pmPenalty = pl.pmPenalty || 0;
+                    // Sumar bonus de Uva (si los tiene)
+                    const paBonus = pl.paBonus || 0;
+                    const pmBonus = pl.pmBonus || 0;
+                    pl.pa = Math.max(0, 6 - paPenalty + paBonus);
+                    pl.pm = Math.max(0, 3 - pmPenalty + pmBonus);
+                    // Limpiar penalizaciones y bonificaciones (solo duran 1 turno)
+                    delete pl.paPenalty;
+                    delete pl.pmPenalty;
+                    delete pl.paBonus;
+                    delete pl.pmBonus;
+                }
+            });
+            processEffects(); // Procesar efectos temporales (reducir duración)
+            enemyTurnActive = false; log("Tu turno Jovenes."); draw();
+        }
+    }, 1000);
+}
+
+function actUva() {
+    // Uva se mueve libremente (5 PM)
+    const allTargets = [...players.filter(pl => pl.hp > 0), ...enemies.filter(e => e.hp > 0)];
+    const randomTarget = allTargets[Math.floor(Math.random() * allTargets.length)];
+
+    // Movimiento caótico (5 PM)
+    for (let i = 0; i < 5; i++) {
+        if (Math.abs(uva.x - randomTarget.x) + Math.abs(uva.y - randomTarget.y) <= 1) break;
+        let reach = calculateReach(uva.x, uva.y, 1);
+        let best = { x: uva.x, y: uva.y, d: 999 };
+        for (let key of reach.keys()) {
+            let [nx, ny] = key.split(',').map(Number);
+            let d = Math.abs(nx - randomTarget.x) + Math.abs(ny - randomTarget.y);
+            if (d < best.d) best = { x: nx, y: ny, d: d };
+        }
+        uva.x = best.x; uva.y = best.y;
+    }
+
+    // Buscar objetivo adyacente
+    const adjacent = allTargets.filter(t => Math.abs(uva.x - t.x) + Math.abs(uva.y - t.y) <= 1);
+    if (adjacent.length === 0) {
+        log("Uva 🐶 mira al vacío y ladra... nada pasa.");
+        return;
+    }
+
+    const target = adjacent[Math.floor(Math.random() * adjacent.length)];
+    const isEnemy = target.id.includes('D');
+
+    // MORDIDA INSTAKILL - muy rara (5% probabilidad, solo a enemigos)
+    if (isEnemy && Math.random() < 0.05) {
+        log(`🦷 ¡¡¡UVA 🐶 USA MORDIDA LETAL!!!`, 'log-dmg');
+        log(`${target.name} fue ELIMINADO INSTANTÁNEAMENTE!`, 'log-dmg');
+        target.hp = 0;
+        enemies = enemies.filter(e => e.hp > 0);
+        if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
+        return;
+    }
+
+    const effect = Math.floor(Math.random() * 6);
+
+    if (isEnemy) {
+        // EFECTOS NEGATIVOS para enemigos
+        switch(effect) {
+            case 0: // -2 PA
+                target.pa = Math.max(0, target.pa - 2);
+                log(`Uva 🐶 muerde a ${target.name}: -2 PA!`, 'log-dmg');
+                break;
+            case 1: // -1 PM
+                target.pm = Math.max(0, target.pm - 1);
+                log(`Uva 🐶 se interpone ante ${target.name}: -1 PM!`, 'log-dmg');
+                break;
+            case 2: // Vulnerabilidad (debuff temporal 2 turnos)
+                addEffect(target, 'vulnerability', 0.3, 2);
+                log(`Uva 🐶 intimida a ${target.name}: ¡+30% daño recibido por 2 turnos!`, 'log-dmg');
+                break;
+            case 3: // Reducir resistencia
+                if(target.resistance) {
+                    target.resistance = Math.max(0, target.resistance - 0.1);
+                    log(`Uva 🐶 debilita a ${target.name}: -10% resistencia!`, 'log-dmg');
+                } else {
+                    addEffect(target, 'vulnerability', 0.15, 2);
+                    log(`Uva 🐶 gruñe a ${target.name}: ¡+15% daño recibido por 2 turnos!`, 'log-dmg');
+                }
+                break;
+            case 4: // Nada - se distrae
+                log("Uva 🐶 se rasca una oreja. No pasa nada.");
+                break;
+            case 5: // Nada - no quiere
+                log(`Uva 🐶 mira a ${target.name} y bosteza. No le da la gana.`);
+                break;
+        }
+    } else {
+        // EFECTOS POSITIVOS para aliados
+        switch(effect) {
+            case 0: // +3 PA (como bonus para próximo turno)
+                target.paBonus = (target.paBonus || 0) + 3;
+                log(`Uva 🐶 inspira a ${target.name}: +3 PA próximo turno!`, 'log-heal');
+                break;
+            case 1: // +2 PM (como bonus para próximo turno)
+                target.pmBonus = (target.pmBonus || 0) + 2;
+                log(`Uva 🐶 empuja a ${target.name}: +2 PM próximo turno!`, 'log-heal');
+                break;
+            case 2: // Aumentar daño (buff temporal 2 turnos)
+                addEffect(target, 'dmgBoost', 0.5, 2);
+                log(`Uva 🐶 gruñe junto a ${target.name}: ¡+50% daño por 2 turnos!`, 'log-heal');
+                break;
+            case 3: // Aumentar resistencia (buff temporal 2 turnos)
+                addEffect(target, 'resistance', 0.3, 2);
+                log(`Uva 🐶 protege a ${target.name}: ¡+30% resistencia por 2 turnos!`, 'log-heal');
+                break;
+            case 4: // Nada - se distrae
+                log("Uva 🐶 se rasca una oreja. No pasa nada.");
+                break;
+            case 5: // Nada - no quiere
+                log(`Uva 🐶 mira a ${target.name} y bosteza. No le da la gana.`);
+                break;
+        }
+    }
+}
+
+function log(msg, cl='') {
+    const l = document.getElementById('log');
+    const d = document.createElement('div'); d.className = cl; d.textContent = "> " + msg;
+    l.prepend(d);
+}
+
+// ===== SISTEMA DE EFECTOS TEMPORALES =====
+function addEffect(target, type, value, turns = 2) {
+    activeEffects.push({ targetId: target.id, type, value, turnsLeft: turns });
+    // Aplicar el efecto inmediatamente
+    if(type === 'dmgBoost') target.dmgBoost = (target.dmgBoost || 0) + value;
+    if(type === 'resistance') target.resistance = (target.resistance || 0) + value;
+    if(type === 'vulnerability') target.vulnerability = (target.vulnerability || 0) + value;
+}
+
+function processEffects() {
+    // Decrementar turnos y eliminar efectos expirados
+    activeEffects = activeEffects.filter(eff => {
+        eff.turnsLeft--;
+        if(eff.turnsLeft <= 0) {
+            // Encontrar el target y remover el efecto
+            const target = [...players, ...enemies, uva].find(t => t && t.id === eff.targetId);
+            if(target) {
+                if(eff.type === 'dmgBoost') {
+                    target.dmgBoost = (target.dmgBoost || 0) - eff.value;
+                    if(target.dmgBoost <= 0) delete target.dmgBoost;
+                    log(`El buff de daño de ${target.name} ha expirado.`);
+                }
+                if(eff.type === 'resistance') {
+                    target.resistance = (target.resistance || 0) - eff.value;
+                    if(target.resistance <= 0) delete target.resistance;
+                    log(`El buff de resistencia de ${target.name} ha expirado.`);
+                }
+                if(eff.type === 'vulnerability') {
+                    target.vulnerability = (target.vulnerability || 0) - eff.value;
+                    if(target.vulnerability <= 0) delete target.vulnerability;
+                    log(`La debilidad de ${target.name} ha expirado.`);
+                }
+            }
+            return false; // Eliminar de la lista
+        }
+        return true; // Mantener en la lista
+    });
+}
+
+function endGame(title, msg, isVictory = false) {
+    const overlay = document.getElementById('end-overlay');
+    const titleEl = document.getElementById('end-title');
+    const msgEl = document.getElementById('end-msg');
+    const btnContainer = document.getElementById('end-buttons');
+
+    titleEl.textContent = title;
+
+    if(isVictory && currentLevel < MAX_LEVEL) {
+        // Victoria pero no es el último nivel
+        const reward = levelConfig[currentLevel].reward;
+        msgEl.innerHTML = `${msg}<br><br>
+            <span style="color:#4dff4d;">¡RECOMPENSA: +${fmt(reward)} para cada héroe!</span><br>
+            <span style="color:#f39c12;">Siguiente: Nivel ${currentLevel + 1}</span>`;
+        btnContainer.innerHTML = `
+            <button onclick="nextLevel()" style="padding:10px 25px; cursor:pointer; background:#2ecc71; color:white; border:none; font-weight:bold; border-radius:5px; margin-right:10px;">SIGUIENTE NIVEL</button>
+            <button onclick="location.reload()" style="padding:10px 25px; cursor:pointer; background:#e74c3c; color:white; border:none; font-weight:bold; border-radius:5px;">REINICIAR</button>
+        `;
+    } else if(isVictory && currentLevel === MAX_LEVEL) {
+        // Victoria final
+        const reward = levelConfig[currentLevel].reward;
+        msgEl.innerHTML = `${msg}<br><br>
+            <span style="color:#f39c12; font-size:18px;">¡COMPLETASTE TODOS LOS NIVELES!</span><br>
+            <span style="color:#4dff4d;">Recompensa final: +${fmt(reward)}</span>`;
+        btnContainer.innerHTML = `
+            <button onclick="location.reload()" style="padding:10px 25px; cursor:pointer; background:#f39c12; color:black; border:none; font-weight:bold; border-radius:5px;">JUGAR DE NUEVO</button>
+        `;
+    } else {
+        // Derrota
+        msgEl.textContent = msg;
+        btnContainer.innerHTML = `
+            <button onclick="location.reload()" style="padding:10px 25px; cursor:pointer; background:#f39c12; color:black; border:none; font-weight:bold; border-radius:5px;">REINTENTAR</button>
+        `;
+    }
+
+    overlay.classList.remove('hidden');
+}
+
+function nextLevel() {
+    // Dar recompensa
+    const reward = levelConfig[currentLevel].reward;
+    players.forEach(p => {
+        p.hp = Math.min(p.maxHp, p.hp + reward);
+        p.maxHp += reward; // Incremento permanente
+    });
+
+    // Avanzar nivel
+    currentLevel++;
+    document.getElementById('end-overlay').classList.add('hidden');
+    document.getElementById('log').innerHTML = '';
+
+    // Iniciar nuevo nivel (conservar HP actual)
+    init(true);
+}
+
+init();
+</script>
+</body>
+</html>
