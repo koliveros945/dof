@@ -87,17 +87,17 @@ const levelConfig = {
     4: { enemies: 8, baseDmgMin: 800000, baseDmgMax: 1100000, reward: 1500000, enemyHp: 2500000, enemyResist: 0.25 }
 };
 
-// HP base de los jugadores (para calcular recompensas)
+// HP base de los jugadores (todos iguales)
 const baseHP = {
     'J': 1750905,
     'H': 1750905,
-    'K': 2626357.5
+    'K': 1750905
 };
 
 let players = [
   {id:'J', name:'El Aleman', x:0,y:0, hp:1750905, maxHp:1750905, pa:6, pm:3, spells:['Puño','Insulto','Salto'], carried:null},
   {id:'H', name:'H', x:0,y:0, hp:1750905, maxHp:1750905, pa:6, pm:3, spells:['Cargar','Lanzar','Empujon'], carried:null},
-  {id:'K', name:'El Joven', x:0,y:0, hp:2626357.5, maxHp:2626357.5, pa:6, pm:3, spells:['Credito','Uva','Atraco'], carried:null}
+  {id:'K', name:'El Joven', x:0,y:0, hp:1750905, maxHp:1750905, pa:6, pm:3, spells:['Credito','Uva','Atraco'], carried:null}
 ];
 
 let enemies = [];
@@ -207,21 +207,30 @@ function calculateReach(startX, startY, maxPM) {
     return reachable;
 }
 
+// ===== SISTEMA DE CRÍTICOS =====
+const CRIT_CHANCE = 0.15; // 15% probabilidad de crítico
+const CRIT_MULTIPLIER = 1.5; // 50% más daño/efecto
+
+function rollCrit() {
+    return Math.random() < CRIT_CHANCE;
+}
+
 // ===== DAÑO Y ROBO DE CAPITAL =====
-function applyDamage(target, amount, spellName, attacker) {
+function applyDamage(target, amount, spellName, attacker, ignoreResistance = false) {
     let finalDmg = amount;
+    let isCrit = rollCrit();
+
+    // Golpe crítico: +50% daño
+    if(isCrit) {
+        finalDmg *= CRIT_MULTIPLIER;
+        log(`💥 ¡GOLPE CRÍTICO! +50% daño`, 'log-dmg');
+    }
 
     // Buff de daño del atacante (Puño acumulable, Uva, etc.)
     if(attacker.dmgBoost) {
         const bonus = finalDmg * attacker.dmgBoost;
         finalDmg += bonus;
         log(`${attacker.name} tiene +${Math.round(attacker.dmgBoost*100)}% daño (+${fmt(bonus)})`, 'log-heal');
-    }
-
-    // Debilidad: El Joven recibe x2 de Escotes
-    if(target.id === 'K' && attacker.id.includes('D')) {
-        finalDmg *= 2;
-        log(`¡DEBILIDAD! El Joven pierde el doble de capital.`, 'log-dmg');
     }
 
     // Vulnerabilidad del objetivo (Insulto acumulable)
@@ -231,8 +240,8 @@ function applyDamage(target, amount, spellName, attacker) {
         log(`${target.name} es vulnerable: +${Math.round(target.vulnerability*100)}% daño recibido (+${fmt(extra)})`, 'log-dmg');
     }
 
-    // Resistencia (reducen daño recibido)
-    if(target.resistance) {
+    // Resistencia (reducen daño recibido) - ignorada en daño por colisión
+    if(target.resistance && !ignoreResistance) {
         const reduced = finalDmg * target.resistance;
         finalDmg -= reduced;
         log(`${target.name} resiste ${Math.round(target.resistance*100)}% (-${fmt(reduced)})`, 'log-heal');
@@ -246,7 +255,7 @@ function applyDamage(target, amount, spellName, attacker) {
         log(`${attacker.name} robó ${fmt(finalDmg)} y aumentó su saldo.`, 'log-heal');
     }
 
-    log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}`, 'log-dmg');
+    log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}${isCrit ? ' 💥' : ''}`, 'log-dmg');
 
     if(target.hp <= 0) {
         target.hp = 0;
@@ -436,12 +445,13 @@ function checkSpellRange(x,y) {
     const d = Math.abs(p.x-x) + Math.abs(p.y-y);
     if(selectedSpell === 'Credito') return d === 0;
     if(['Puño','Empujon','Cargar'].includes(selectedSpell)) return d === 1;
-    // Uva: adyacente para invocar O donde está Uva para intercambiar
+    // Uva: invocar (adyacente), intercambiar (sobre Uva), o comandar (sobre enemigo/aliado si Uva existe)
     if(selectedSpell === 'Uva') {
         if(uva && uva.x === x && uva.y === y) return true; // Intercambiar con Uva
+        if(uva && getEntityAt(x, y) && getEntityAt(x, y) !== p) return true; // Comandar Uva a atacar/boostear
         return d === 1 && !uvaUsed; // Invocar (solo si no ha sido invocada)
     }
-    if(selectedSpell === 'Insulto') return (p.x===x || p.y===y) && d <= 3 && d > 0;
+    if(selectedSpell === 'Insulto') return (p.x===x || p.y===y) && d >= 2 && d <= 3;
     if(selectedSpell === 'Salto') return d === 4 && !getEntityAt(x,y) && map[y][x]===0;
     // Atraco: SOLO diagonales (1 casilla)
     if(selectedSpell === 'Atraco') {
@@ -456,7 +466,24 @@ function checkSpellRange(x,y) {
 function executeSpell(x,y) {
     const p = players[activeIdx];
     const target = getEntityAt(x,y);
-    if(p.pa < 3) return;
+
+    // Validar PA según el costo del hechizo
+    const spellCosts = {
+        'Salto': 1,
+        'Insulto': 2,
+        'Empujon': 2,
+        'Cargar': 2,
+        'Lanzar': 2,
+        'Puño': 3,
+        'Credito': 3,
+        'Uva': 3,
+        'Atraco': 3
+    };
+    const cost = spellCosts[selectedSpell] || 3;
+    if(p.pa < cost) {
+        log(`No tienes suficientes PA para usar ${selectedSpell} (necesitas ${cost})`, 'log-dmg');
+        return;
+    }
 
     // DAÑOS: Puño (600k-800k) > Empujón (450k-600k) > Insulto/Atraco (300k-450k)
     if(selectedSpell === 'Puño') {
@@ -475,11 +502,13 @@ function executeSpell(x,y) {
                 selectedSpell = null; draw(); return;
             }
             applyDamage(target, 300000 + Math.random()*150000, selectedSpell, p);
-            // Debuff: objetivo recibe +5% daño acumulable por 2 turnos
-            addEffect(target, 'vulnerability', 0.05, 2);
+            // Debuff: objetivo recibe +5% daño por 1 turno
+            addEffect(target, 'vulnerability', 0.05, 1);
+            // Quita 1 PM fijo
+            target.pm = Math.max(0, target.pm - 1);
             target.insulted = true; // Marcar como insultado
-            log(`${target.name} está debilitado: +5% daño recibido por 2 turnos!`, 'log-dmg');
-            p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA, no 3
+            log(`${target.name} está debilitado: +5% daño recibido por 1 turno y -1 PM!`, 'log-dmg');
+            p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA
         }
     }
     else if(selectedSpell === 'Atraco') {
@@ -532,7 +561,7 @@ function executeSpell(x,y) {
                 // Empujón sobre enemigo: daño por colisión
                 if(againstWall) {
                     const wallDmg = 600000 + Math.random()*200000;
-                    applyDamage(target, wallDmg, "Empujon (APLASTADO)", p);
+                    applyDamage(target, wallDmg, "Empujon (APLASTADO)", p, true); // Ignora resistencia
                     log(`${target.name} fue APLASTADO contra la pared!`, 'log-dmg');
                 } else {
                     for(let i = 1; i <= 2; i++) {
@@ -550,7 +579,7 @@ function executeSpell(x,y) {
 
                         if(collision) {
                             const collisionDmg = 350000 + Math.random()*150000;
-                            applyDamage(target, collisionDmg, "Empujon (colisión)", p);
+                            applyDamage(target, collisionDmg, "Empujon (colisión)", p, true); // Ignora resistencia
                             log(`${target.name} fue empujado ${pushed} casilla(s) y CHOCÓ!`, 'log-dmg');
                         } else {
                             log(`${target.name} fue empujado ${pushed} casilla(s).`);
@@ -558,19 +587,25 @@ function executeSpell(x,y) {
                     }
                 }
             }
+            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
     } 
     else if(selectedSpell === 'Credito') {
-        const heal = 390621;
+        let heal = 390621;
+        const isCrit = rollCrit();
+        if(isCrit) {
+            heal *= CRIT_MULTIPLIER;
+            log(`💚 ¡CURACIÓN CRÍTICA! +50% curación`, 'log-heal');
+        }
         // Kevin siempre recibe la curación
         const kevin = players.find(pl => pl.id === 'K');
         kevin.hp = Math.min(kevin.maxHp, kevin.hp + heal);
-        log(`${kevin.name} recibe consignación: +${fmt(heal)}`, 'log-heal');
+        log(`${kevin.name} recibe consignación: +${fmt(heal)}${isCrit ? ' 💚' : ''}`, 'log-heal');
         // Aliados adyacentes a Kevin también reciben
         players.forEach(pl => {
             if(pl.id !== 'K' && pl.hp > 0 && Math.abs(kevin.x-pl.x)+Math.abs(kevin.y-pl.y) <= 1) {
                 pl.hp = Math.min(pl.maxHp, pl.hp + heal);
-                log(`${pl.name} recibe consignación: +${fmt(heal)}`, 'log-heal');
+                log(`${pl.name} recibe consignación: +${fmt(heal)}${isCrit ? ' 💚' : ''}`, 'log-heal');
             }
         });
     } 
@@ -581,8 +616,13 @@ function executeSpell(x,y) {
             p.x = uva.x; p.y = uva.y;
             uva.x = oldX; uva.y = oldY;
             log(`${p.name} intercambió posición con Uva 🐶!`, 'log-heal');
-        } else {
-            // Invocar Uva por primera vez
+        }
+        // Si Uva existe y hay un objetivo en la celda, comandar a Uva
+        else if(uva && target && target !== p && target.id !== 'U') {
+            commandUva(target);
+        }
+        // Invocar Uva por primera vez
+        else {
             if(uvaUsed) {
                 log("¡Uva 🐶 ya fue invocada este combate! No puede volver.", 'log-dmg');
                 selectedSpell = null; draw(); return;
@@ -594,19 +634,24 @@ function executeSpell(x,y) {
     }
     else if(selectedSpell === 'Salto') {
         p.x = x; p.y = y;
-        p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA, no 3
+        p.pa -= 1; selectedSpell = null; draw(); return; // Cuesta 1 PA
     }
     else if(selectedSpell === 'Cargar') {
-        if(target && target !== p) { p.carried = target; log(`${p.name} cargó a ${target.name}`); }
-    }
-    else if(selectedSpell === 'Lanzar') {
-        if(p.carried) { 
-            p.carried.x = x; p.carried.y = y; 
-            log(`${p.name} lanzó a ${p.carried.name}`); 
-            p.carried = null; 
+        if(target && target !== p) {
+            p.carried = target;
+            log(`${p.name} cargó a ${target.name}`);
+            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
     }
-    
+    else if(selectedSpell === 'Lanzar') {
+        if(p.carried) {
+            p.carried.x = x; p.carried.y = y;
+            log(`${p.name} lanzó a ${p.carried.name}`);
+            p.carried = null;
+            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
+        }
+    }
+
     p.pa -= 3; selectedSpell = null; draw();
 }
 
@@ -625,11 +670,43 @@ function startEnemyTurn() {
             if(e.hp <= 0) return; // Verificar de nuevo por si murió
             const alivePlayers = players.filter(pl => pl.hp > 0);
             if(alivePlayers.length === 0) return;
-            const elJoven = alivePlayers.find(pl => pl.id === 'K');
-            let target = (elJoven && Math.abs(e.x-elJoven.x)+Math.abs(e.y-elJoven.y) <= 4) ? elJoven : alivePlayers[0];
+
+            // IA mejorada: seleccionar objetivo
+            let target = null;
+
+            // 1. Buscar jugador con poca vida (menos del 30%) que esté al alcance (distancia <= 4)
+            const lowHpPlayers = alivePlayers.filter(pl => {
+                const hpPercent = pl.hp / pl.maxHp;
+                const dist = Math.abs(e.x - pl.x) + Math.abs(e.y - pl.y);
+                return hpPercent < 0.30 && dist <= 4;
+            });
+
+            if(lowHpPlayers.length > 0) {
+                // Priorizar el de menor HP
+                target = lowHpPlayers.reduce((a, b) => a.hp < b.hp ? a : b);
+                log(`${e.name} detecta a ${target.name} debilitado!`, 'log-dmg');
+            }
+
+            // 2. Si no hay objetivo débil, priorizar El Joven si está cerca
+            if(!target) {
+                const elJoven = alivePlayers.find(pl => pl.id === 'K');
+                if(elJoven && Math.abs(e.x - elJoven.x) + Math.abs(e.y - elJoven.y) <= 4) {
+                    target = elJoven;
+                }
+            }
+
+            // 3. Si no, atacar al más cercano
+            if(!target) {
+                target = alivePlayers.reduce((closest, pl) => {
+                    const distCurrent = Math.abs(e.x - pl.x) + Math.abs(e.y - pl.y);
+                    const distClosest = Math.abs(e.x - closest.x) + Math.abs(e.y - closest.y);
+                    return distCurrent < distClosest ? pl : closest;
+                });
+            }
+
             if(!target) return;
 
-            // Movimiento
+            // Movimiento hacia el objetivo
             for(let i=0; i<e.pm; i++) {
                 if(Math.abs(e.x-target.x)+Math.abs(e.y-target.y) <= 1) break;
                 let reach = calculateReach(e.x, e.y, 1);
@@ -642,7 +719,22 @@ function startEnemyTurn() {
                 e.x = best.x; e.y = best.y;
             }
 
-            // Calcular distancia al objetivo
+            // DESPUÉS de moverse: reconsiderar objetivo para "Hola perdido!"
+            // Buscar si hay alguien adyacente con poca vida que sea mejor objetivo
+            const adjacentPlayers = alivePlayers.filter(pl =>
+                Math.abs(e.x - pl.x) + Math.abs(e.y - pl.y) <= 1
+            );
+
+            if(adjacentPlayers.length > 0) {
+                // Priorizar al de menor HP entre los adyacentes
+                const weakestAdjacent = adjacentPlayers.reduce((a, b) => a.hp < b.hp ? a : b);
+                // Si el más débil adyacente tiene menos HP que el objetivo actual, cambiar
+                if(weakestAdjacent.hp < target.hp || Math.abs(e.x - target.x) + Math.abs(e.y - target.y) > 1) {
+                    target = weakestAdjacent;
+                }
+            }
+
+            // Calcular distancia al objetivo final
             const distToTarget = Math.abs(e.x-target.x)+Math.abs(e.y-target.y);
             const config = levelConfig[currentLevel];
 
@@ -716,6 +808,86 @@ function startEnemyTurn() {
             enemyTurnActive = false; log("Tu turno Jovenes."); draw();
         }
     }, 1000);
+}
+
+// Comandar a Uva para atacar enemigo o boostear aliado
+function commandUva(target) {
+    if(!uva) return;
+
+    const isEnemy = target.id.includes('D');
+    const isAlly = players.includes(target);
+
+    // Uva se mueve hacia el objetivo
+    log(`${players[activeIdx].name} le ordena a Uva 🐶 ir hacia ${target.name}!`);
+
+    // Mover Uva hacia el objetivo (hasta 5 PM)
+    for (let i = 0; i < 5; i++) {
+        if (Math.abs(uva.x - target.x) + Math.abs(uva.y - target.y) <= 1) break;
+        let reach = calculateReach(uva.x, uva.y, 1);
+        let best = { x: uva.x, y: uva.y, d: 999 };
+        for (let key of reach.keys()) {
+            let [nx, ny] = key.split(',').map(Number);
+            let d = Math.abs(nx - target.x) + Math.abs(ny - target.y);
+            if (d < best.d) best = { x: nx, y: ny, d: d };
+        }
+        uva.x = best.x; uva.y = best.y;
+    }
+
+    // Verificar si llegó al objetivo
+    if (Math.abs(uva.x - target.x) + Math.abs(uva.y - target.y) > 1) {
+        log(`Uva 🐶 no alcanzó a ${target.name}. Está muy lejos.`);
+        return;
+    }
+
+    // 40% de probabilidad de que Uva no quiera hacer nada
+    if (Math.random() < 0.4) {
+        log(`Uva 🐶 mira a ${target.name} y bosteza. No le da la gana.`);
+        return;
+    }
+
+    if (isEnemy) {
+        // Atacar enemigo
+        const effect = Math.floor(Math.random() * 4);
+        switch(effect) {
+            case 0: // Mordida normal
+                const dmg = 200000 + Math.random() * 150000;
+                applyDamage(target, dmg, "Mordida 🐶", uva);
+                break;
+            case 1: // -2 PA
+                target.pa = Math.max(0, target.pa - 2);
+                log(`Uva 🐶 muerde a ${target.name}: -2 PA!`, 'log-dmg');
+                break;
+            case 2: // Vulnerabilidad
+                addEffect(target, 'vulnerability', 0.3, 2);
+                log(`Uva 🐶 intimida a ${target.name}: ¡+30% daño recibido por 2 turnos!`, 'log-dmg');
+                break;
+            case 3: // -1 PM
+                target.pm = Math.max(0, target.pm - 1);
+                log(`Uva 🐶 se interpone ante ${target.name}: -1 PM!`, 'log-dmg');
+                break;
+        }
+    } else if (isAlly) {
+        // Boostear aliado
+        const effect = Math.floor(Math.random() * 4);
+        switch(effect) {
+            case 0: // +3 PA
+                target.pa += 3;
+                log(`Uva 🐶 inspira a ${target.name}: +3 PA!`, 'log-heal');
+                break;
+            case 1: // +2 PM
+                target.pm += 2;
+                log(`Uva 🐶 empuja a ${target.name}: +2 PM!`, 'log-heal');
+                break;
+            case 2: // +50% daño
+                addEffect(target, 'dmgBoost', 0.5, 2);
+                log(`Uva 🐶 gruñe junto a ${target.name}: ¡+50% daño por 2 turnos!`, 'log-heal');
+                break;
+            case 3: // +30% resistencia
+                addEffect(target, 'resistance', 0.3, 2);
+                log(`Uva 🐶 protege a ${target.name}: ¡+30% resistencia por 2 turnos!`, 'log-heal');
+                break;
+        }
+    }
 }
 
 function actUva() {
@@ -891,8 +1063,15 @@ function endGame(title, msg, isVictory = false) {
             <button onclick="location.reload()" style="padding:10px 25px; cursor:pointer; background:#f39c12; color:black; border:none; font-weight:bold; border-radius:5px;">JUGAR DE NUEVO</button>
         `;
     } else {
-        // Derrota
-        msgEl.textContent = msg;
+        // Derrota - mostrar resumen del combate
+        const aliveEnemies = enemies.filter(e => e.hp > 0);
+        const alivePlayers = players.filter(p => p.hp > 0);
+        let summary = `<br><br><span style="color:#aaa; font-size:12px;">`;
+        summary += `Enemigos restantes: ${aliveEnemies.length}<br>`;
+        summary += `Aliados en pie: ${alivePlayers.length}/3<br>`;
+        summary += `Nivel alcanzado: ${currentLevel}/${MAX_LEVEL}`;
+        summary += `</span>`;
+        msgEl.innerHTML = msg + summary;
         btnContainer.innerHTML = `
             <button onclick="location.reload()" style="padding:10px 25px; cursor:pointer; background:#f39c12; color:black; border:none; font-weight:bold; border-radius:5px;">REINTENTAR</button>
         `;
