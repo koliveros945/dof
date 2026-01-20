@@ -60,6 +60,7 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 <div id="spellbar">
     <div id="spells-inner" style="display:flex; gap:8px;"></div>
     <button id="endTurnBtn" style="padding:8px 15px; cursor:pointer; background:#e74c3c; color:white; border:none; border-radius:8px; font-weight:bold;">PASAR TURNO</button>
+    <button id="muteBtn" onclick="toggleMute()" style="padding:8px 12px; cursor:pointer; background:#333; color:white; border:1px solid #555; border-radius:8px; font-size:16px;" title="Silenciar/Activar sonido">🔊</button>
 </div>
 
 <div id="log"></div>
@@ -73,6 +74,70 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 </div>
 
 <script>
+// ===== SISTEMA DE AUDIO =====
+const AudioManager = {
+    music: null,
+    musicVolume: 0.4,
+    sfxVolume: 0.6,
+    muted: false,
+
+    // Cargar y reproducir música de nivel
+    playMusic(level) {
+        if(this.music) {
+            this.music.pause();
+            this.music.currentTime = 0;
+        }
+        this.music = new Audio(`nivel${level}.ogg`);
+        this.music.loop = true;
+        this.music.volume = this.muted ? 0 : this.musicVolume;
+        this.music.play().catch(e => console.log('Música requiere interacción del usuario'));
+    },
+
+    // Reproducir efecto de sonido
+    playSFX(name) {
+        if(this.muted) return;
+        const sfx = new Audio(`${name}.mp3`);
+        sfx.volume = this.sfxVolume;
+        sfx.play().catch(e => console.log('SFX no disponible:', name));
+    },
+
+    // Alternar mute
+    toggleMute() {
+        this.muted = !this.muted;
+        if(this.music) {
+            this.music.volume = this.muted ? 0 : this.musicVolume;
+        }
+        return this.muted;
+    },
+
+    // Detener música
+    stopMusic() {
+        if(this.music) {
+            this.music.pause();
+            this.music.currentTime = 0;
+        }
+    }
+};
+
+// Mapeo de hechizos a efectos de sonido
+const spellSFX = {
+    'Puño': 'puno',
+    'Insulto': 'insulto',
+    'Salto': 'salto',
+    'Cargar': 'cargar',
+    'Lanzar': 'lanzar',
+    'Empujon': 'empujon',
+    'Credito': 'credito',
+    'Uva': 'uva',
+    'Atraco': 'atraco',
+    'Hola perdido!': 'hola_perdido',
+    'Ya no saludas': 'ya_no_saludas',
+    'Mordida 🐶': 'mordida',
+    'critico': 'critico',
+    'victoria': 'victoria',
+    'derrota': 'derrota'
+};
+
 // ===== CONFIGURACIÓN $COP =====
 const fmt = (n) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
 const SIZE = 8;
@@ -113,6 +178,9 @@ let highlightedEnemy = null; // Enemigo resaltado al hacer clic
 
 // ===== INICIALIZACIÓN =====
 function init(isNewLevel = false) {
+    // Reproducir música del nivel
+    AudioManager.playMusic(currentLevel);
+
     // Generar mapa
     map = Array.from({length:SIZE}, (_,y) => Array.from({length:SIZE}, (_,x) => {
         if(x===0 || x===SIZE-1 || y===0 || y===SIZE-1) return 1;
@@ -220,10 +288,39 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
     let finalDmg = amount;
     let isCrit = rollCrit();
 
+    // Reproducir efecto de sonido del hechizo
+    if(spellSFX[spellName]) {
+        AudioManager.playSFX(spellSFX[spellName]);
+    }
+
     // Golpe crítico: +50% daño
     if(isCrit) {
         finalDmg *= CRIT_MULTIPLIER;
+        AudioManager.playSFX('critico');
         log(`💥 ¡GOLPE CRÍTICO! +50% daño`, 'log-dmg');
+    }
+
+    // === HABILIDADES PASIVAS ===
+    // El Alemán: más daño con menos vida (hasta +100% con 0% vida)
+    if(attacker.id === 'J') {
+        const hpPercent = attacker.hp / attacker.maxHp;
+        const passiveBonus = (1 - hpPercent); // 0% vida = +100%, 50% vida = +50%, 100% vida = +0%
+        if(passiveBonus > 0.05) { // Solo mostrar si es significativo (>5%)
+            const bonus = finalDmg * passiveBonus;
+            finalDmg += bonus;
+            log(`🔥 Furia del Alemán: +${Math.round(passiveBonus*100)}% daño (+${fmt(bonus)})`, 'log-heal');
+        }
+    }
+
+    // El Joven: más daño con más vida (hasta +50% con 100% vida)
+    if(attacker.id === 'K') {
+        const hpPercent = attacker.hp / attacker.maxHp;
+        const passiveBonus = hpPercent * 0.5; // 100% vida = +50%, 50% vida = +25%, 0% vida = +0%
+        if(passiveBonus > 0.05) { // Solo mostrar si es significativo (>5%)
+            const bonus = finalDmg * passiveBonus;
+            finalDmg += bonus;
+            log(`💰 Capital del Joven: +${Math.round(passiveBonus*100)}% daño (+${fmt(bonus)})`, 'log-heal');
+        }
     }
 
     // Buff de daño del atacante (Puño acumulable, Uva, etc.)
@@ -587,14 +684,20 @@ function executeSpell(x,y) {
                     }
                 }
             }
+            // Pasiva de H: gana 3-5% resistencia por empujar (dura 3 turnos)
+            const resBonus = 0.03 + Math.random() * 0.02; // 3-5%
+            addEffect(p, 'resistance', resBonus, 3);
+            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 3 turnos!`, 'log-heal');
             p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
-    } 
+    }
     else if(selectedSpell === 'Credito') {
+        AudioManager.playSFX('credito');
         let heal = 390621;
         const isCrit = rollCrit();
         if(isCrit) {
             heal *= CRIT_MULTIPLIER;
+            AudioManager.playSFX('critico');
             log(`💚 ¡CURACIÓN CRÍTICA! +50% curación`, 'log-heal');
         }
         // Kevin siempre recibe la curación
@@ -610,6 +713,7 @@ function executeSpell(x,y) {
         });
     } 
     else if(selectedSpell === 'Uva') {
+        AudioManager.playSFX('uva');
         // Si Uva está en la celda objetivo, intercambiar posición
         if(uva && uva.x === x && uva.y === y) {
             const oldX = p.x, oldY = p.y;
@@ -633,11 +737,13 @@ function executeSpell(x,y) {
         }
     }
     else if(selectedSpell === 'Salto') {
+        AudioManager.playSFX('salto');
         p.x = x; p.y = y;
         p.pa -= 1; selectedSpell = null; draw(); return; // Cuesta 1 PA
     }
     else if(selectedSpell === 'Cargar') {
         if(target && target !== p) {
+            AudioManager.playSFX('cargar');
             p.carried = target;
             log(`${p.name} cargó a ${target.name}`);
             p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
@@ -645,9 +751,14 @@ function executeSpell(x,y) {
     }
     else if(selectedSpell === 'Lanzar') {
         if(p.carried) {
+            AudioManager.playSFX('lanzar');
             p.carried.x = x; p.carried.y = y;
             log(`${p.name} lanzó a ${p.carried.name}`);
             p.carried = null;
+            // Pasiva de H: gana 3-5% resistencia por lanzar (dura 3 turnos)
+            const resBonus = 0.03 + Math.random() * 0.02; // 3-5%
+            addEffect(p, 'resistance', resBonus, 3);
+            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 3 turnos!`, 'log-heal');
             p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
     }
@@ -850,7 +961,7 @@ function commandUva(target) {
         const effect = Math.floor(Math.random() * 4);
         switch(effect) {
             case 0: // Mordida normal
-                const dmg = 200000 + Math.random() * 150000;
+                const dmg = 500000 + Math.random() * 300000;
                 applyDamage(target, dmg, "Mordida 🐶", uva);
                 break;
             case 1: // -2 PA
@@ -1041,6 +1152,10 @@ function endGame(title, msg, isVictory = false) {
     const msgEl = document.getElementById('end-msg');
     const btnContainer = document.getElementById('end-buttons');
 
+    // Detener música y reproducir sonido de victoria/derrota
+    AudioManager.stopMusic();
+    AudioManager.playSFX(isVictory ? 'victoria' : 'derrota');
+
     titleEl.textContent = title;
 
     if(isVictory && currentLevel < MAX_LEVEL) {
@@ -1095,6 +1210,12 @@ function nextLevel() {
 
     // Iniciar nuevo nivel (conservar HP actual)
     init(true);
+}
+
+// Función para alternar mute
+function toggleMute() {
+    const muted = AudioManager.toggleMute();
+    document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
 }
 
 init();
