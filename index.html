@@ -50,6 +50,59 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 .portrait.fury { animation: fury-pulse 0.5s ease-in-out infinite; border-color: #ff3300 !important; }
 .hp-fill.fury { background: linear-gradient(90deg, #ff0000, #ff6600, #ff0000); background-size: 200% 100%; animation: fury-bar 0.5s linear infinite; }
 @keyframes fury-bar { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+
+/* Efecto Ultra Instinto - para completar combo */
+@keyframes ultra-instinct {
+    0%, 100% {
+        box-shadow: inset 0 0 20px rgba(200,220,255,0.9), 0 0 15px rgba(150,180,255,0.7), 0 0 30px rgba(100,150,255,0.5);
+        filter: brightness(1.2) saturate(0.8);
+    }
+    50% {
+        box-shadow: inset 0 0 30px rgba(255,255,255,1), 0 0 25px rgba(180,200,255,0.9), 0 0 40px rgba(150,180,255,0.7);
+        filter: brightness(1.4) saturate(0.6);
+    }
+}
+.cell.ultra-instinct {
+    animation: ultra-instinct 0.8s ease-in-out infinite;
+    border: 2px solid #c0d8ff !important;
+}
+.portrait.ultra-instinct {
+    animation: ultra-instinct 0.8s ease-in-out infinite;
+    border-color: #c0d8ff !important;
+}
+.spellBtn.ultra-instinct {
+    animation: ultra-instinct 0.8s ease-in-out infinite;
+    border-color: #c0d8ff !important;
+    background: linear-gradient(135deg, #1a2a4a, #2a3a5a) !important;
+}
+
+/* Efecto Modo Escudo de H - azul brillante */
+@keyframes shield-pulse {
+    0%, 100% {
+        box-shadow: inset 0 0 15px rgba(52,152,219,0.8), 0 0 12px rgba(41,128,185,0.7), 0 0 25px rgba(52,152,219,0.4);
+        filter: brightness(1.1);
+    }
+    50% {
+        box-shadow: inset 0 0 25px rgba(52,152,219,1), 0 0 20px rgba(41,128,185,0.9), 0 0 35px rgba(52,152,219,0.6);
+        filter: brightness(1.3);
+    }
+}
+.cell.shield-mode { animation: shield-pulse 0.7s ease-in-out infinite; border: 2px solid #3498db !important; }
+.portrait.shield-mode { animation: shield-pulse 0.7s ease-in-out infinite; border-color: #3498db !important; }
+.hp-fill.shield-mode { background: linear-gradient(90deg, #2980b9, #3498db, #2980b9); background-size: 200% 100%; animation: fury-bar 0.5s linear infinite; }
+
+/* Efecto Uva Evolucionada - amarillo brillante */
+@keyframes uva-evolved {
+    0%, 100% {
+        box-shadow: inset 0 0 15px rgba(241,196,15,0.8), 0 0 12px rgba(243,156,18,0.7), 0 0 25px rgba(241,196,15,0.4);
+        filter: brightness(1.2) saturate(1.2);
+    }
+    50% {
+        box-shadow: inset 0 0 25px rgba(241,196,15,1), 0 0 20px rgba(243,156,18,0.9), 0 0 35px rgba(241,196,15,0.6);
+        filter: brightness(1.4) saturate(1.3);
+    }
+}
+.cell.uva-evolved { animation: uva-evolved 0.6s ease-in-out infinite; border: 2px solid #f1c40f !important; }
 </style>
 </head>
 <body>
@@ -184,6 +237,8 @@ let selectedSpell = null;
 let isMoving = false;
 let activeEffects = []; // Sistema de efectos temporales: {target, type, value, turnsLeft}
 let highlightedEnemy = null; // Enemigo resaltado al hacer clic
+let atracoCombo = 0; // Contador de combo de Atraco (se resetea cada turno)
+let comboTracker = {}; // Trackea ataques recibidos por cada objetivo este turno: {targetId: [{spell, dmg}, ...]}
 
 // ===== INICIALIZACIÓN =====
 function init(isNewLevel = false) {
@@ -374,6 +429,18 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
 
     log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}${isCrit ? ' 💥' : ''}`, 'log-dmg');
 
+    // Trackear ataque para sistema de combos (solo ataques de jugadores)
+    // Normalizar nombre del hechizo para el combo
+    let comboSpell = spellName;
+    if(spellName.startsWith('Empujon')) comboSpell = 'Empujon';
+
+    if(attacker && !attacker.id.includes('D') && ['Empujon', 'Atraco', 'Puño'].includes(comboSpell)) {
+        if(!comboTracker[target.id]) comboTracker[target.id] = [];
+        comboTracker[target.id].push({ spell: comboSpell, dmg: finalDmg });
+        checkAndApplyCombo(target);
+        notifyComboProgress(target.id);
+    }
+
     if(target.hp <= 0) {
         target.hp = 0;
         if(target.id === 'K') endGame("QUIEBRA DEL JOVEN", "El saldo de El Joven es $0. Has perdido.", false);
@@ -387,12 +454,89 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
     }
 }
 
+// Sistema de combos: verifica si se completó un combo y aplica daño bonus
+function checkAndApplyCombo(target) {
+    const hits = comboTracker[target.id];
+    if(!hits || hits.length < 3) return;
+
+    // Buscar las últimas 3 secuencias
+    const last3 = hits.slice(-3);
+    const sequence = last3.map(h => h.spell).join('+');
+
+    // Combo 1: Empujon + Atraco + Puño
+    // Combo 2: Atraco + Empujon + Puño
+    if(sequence === 'Empujon+Atraco+Puño' || sequence === 'Atraco+Empujon+Puño') {
+        // Daño bonus = daño de Atraco + daño de Puño (ignorando resistencias)
+        const atracoDmg = last3.find(h => h.spell === 'Atraco')?.dmg || 0;
+        const punoDmg = last3.find(h => h.spell === 'Puño')?.dmg || 0;
+        const bonusDmg = atracoDmg + punoDmg;
+
+        target.hp -= bonusDmg;
+        log(`💥💥💥 ¡¡COMBO DEVASTADOR!! ${target.name} recibe ${fmt(bonusDmg)} de daño adicional!`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        // Limpiar el combo tracker para este objetivo (no se puede repetir inmediatamente)
+        comboTracker[target.id] = [];
+
+        // Verificar si murió
+        if(target.hp <= 0) {
+            target.hp = 0;
+            if(target.id.includes('D')) {
+                log(`${target.name} fue ANIQUILADO por el combo!`);
+                enemies = enemies.filter(e => e.hp > 0);
+                if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
+            }
+        }
+    }
+}
+
+// Detecta si hay un combo pendiente y qué hechizo lo completaría
+function getComboFinisher() {
+    // Buscar en todos los enemigos si alguno tiene 2 hits del combo
+    for(const targetId in comboTracker) {
+        const hits = comboTracker[targetId];
+        if(!hits || hits.length < 2) continue;
+
+        const last2 = hits.slice(-2).map(h => h.spell).join('+');
+
+        // Combo 1: Empujon + Atraco + ? → necesita Puño
+        if(last2 === 'Empujon+Atraco') return { finisher: 'Puño', targetId };
+        // Combo 2: Atraco + Empujon + ? → necesita Puño
+        if(last2 === 'Atraco+Empujon') return { finisher: 'Puño', targetId };
+    }
+    return null;
+}
+
+// Notifica al usuario sobre el progreso del combo
+function notifyComboProgress(targetId) {
+    const hits = comboTracker[targetId];
+    if(!hits || hits.length < 1) return;
+
+    const target = enemies.find(e => e.id === targetId);
+    if(!target) return;
+
+    const last1 = hits.slice(-1).map(h => h.spell).join('');
+    const last2 = hits.length >= 2 ? hits.slice(-2).map(h => h.spell).join('+') : '';
+
+    // Notificar inicio de combo
+    if(hits.length === 1 && (last1 === 'Empujon' || last1 === 'Atraco')) {
+        log(`⚡ COMBO INICIADO en ${target.name}: ${last1} → necesita ${last1 === 'Empujon' ? 'Atraco' : 'Empujon'} + Puño`, 'log-heal');
+    }
+    // Notificar que falta el finisher
+    else if(last2 === 'Empujon+Atraco' || last2 === 'Atraco+Empujon') {
+        log(`⚡⚡ ¡COMBO LISTO! ${target.name} está vulnerable. ¡El Alemán puede rematar con PUÑO!`, 'log-heal');
+    }
+}
+
 // ===== DIBUJO =====
 function draw() {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
     const p = players[activeIdx];
     let reachMap = isMoving ? calculateReach(p.x, p.y, p.pm) : new Map();
+
+    // Detectar si hay combo pendiente
+    const comboInfo = getComboFinisher();
 
     for(let y=0; y<SIZE; y++) {
         for(let x=0; x<SIZE; x++) {
@@ -414,6 +558,20 @@ function draw() {
                 // Efecto de furia del Alemán (< 20% vida)
                 if(ent.id === 'J' && ent.hp / ent.maxHp < 0.20) {
                     cell.classList.add('fury');
+                }
+                // Efecto Ultra Instinto - Alemán puede completar combo con Puño
+                if(comboInfo && comboInfo.finisher === 'Puño' && ent.id === 'J' && ent.hp > 0) {
+                    cell.classList.add('ultra-instinct');
+                }
+                // Efecto Modo Escudo de H (< 30% vida)
+                const hPlayer = players.find(pl => pl.id === 'H');
+                if(ent.id === 'H' && hPlayer && hPlayer.hp / hPlayer.maxHp < 0.30) {
+                    cell.classList.add('shield-mode');
+                }
+                // Efecto Uva Evolucionada (Joven < 30% vida)
+                const joven = players.find(pl => pl.id === 'K');
+                if(ent.id === 'U' && uva && joven && joven.hp / joven.maxHp < 0.30) {
+                    cell.classList.add('uva-evolved');
                 }
             }
             if(isMoving && reachMap.has(`${x},${y}`)) cell.classList.add('move');
@@ -454,12 +612,20 @@ function updateUI() {
 
         // Clase especial para Alemán en furia
         const isFury = pl.id === 'J' && pct < 20;
+        // Clase especial para H en modo escudo
+        const isShieldMode = pl.id === 'H' && pct < 30;
         let hpFillClass = 'hp-fill';
         if(pl.id === 'K') hpFillClass += ' kevin';
         if(isFury) hpFillClass += ' fury';
+        if(isShieldMode) hpFillClass += ' shield-mode';
+
+        // Indicador de estado especial
+        let stateIcon = '';
+        if(isFury) stateIcon = ' 🔥';
+        if(isShieldMode) stateIcon = ' 🛡️';
 
         row.innerHTML = `
-            <span class="hp-name">${pl.name}${isFury ? ' 🔥' : ''}</span>
+            <span class="hp-name">${pl.name}${stateIcon}</span>
             <div class="hp-bar">
                 <div class="${hpFillClass}" style="width:${pct}%"></div>
             </div>
@@ -473,11 +639,17 @@ function updateUI() {
     const ports = document.getElementById('portraits');
     ports.innerHTML = '';
     const spriteMap = {'J': 'aleman.png', 'H': 'h.png', 'K': 'joven.png'};
+
+    // Detectar combo pendiente para efecto Ultra Instinto
+    const comboInfo = getComboFinisher();
+
     players.forEach((pl, i) => {
         if(pl.hp <= 0) return;
         const div = document.createElement('div');
         const isFury = pl.id === 'J' && (pl.hp / pl.maxHp) < 0.20;
-        div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''} ${isFury?'fury':''}`;
+        const isShieldMode = pl.id === 'H' && (pl.hp / pl.maxHp) < 0.30;
+        const isUltraInstinct = comboInfo && comboInfo.finisher === 'Puño' && pl.id === 'J';
+        div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''} ${isFury?'fury':''} ${isShieldMode?'shield-mode':''} ${isUltraInstinct?'ultra-instinct':''}`;
         const img = document.createElement('img'); img.src = spriteMap[pl.id];
         div.appendChild(img);
         div.onclick = () => { if(!enemyTurnActive){ activeIdx=i; resetActions(); draw(); }};
@@ -488,8 +660,10 @@ function updateUI() {
     sBar.innerHTML = '';
     p.spells.forEach(s => {
         const btn = document.createElement('button');
-        btn.className = `spellBtn ${selectedSpell===s?'selected':''}`;
-        btn.textContent = s;
+        // Efecto Ultra Instinto en el botón de Puño cuando se puede completar combo
+        const isComboFinisher = comboInfo && comboInfo.finisher === s;
+        btn.className = `spellBtn ${selectedSpell===s?'selected':''} ${isComboFinisher?'ultra-instinct':''}`;
+        btn.textContent = isComboFinisher ? `⚡${s}⚡` : s;
         btn.onclick = () => { if(!enemyTurnActive){ selectedSpell=(selectedSpell===s?null:s); isMoving=false; draw(); }};
         sBar.appendChild(btn);
     });
@@ -573,11 +747,14 @@ function checkSpellRange(x,y) {
     const d = Math.abs(p.x-x) + Math.abs(p.y-y);
 
     // Validar PA antes de mostrar rango
+    // H en modo escudo: todos sus hechizos cuestan 1PA
+    const isHShieldMode = p.id === 'H' && (p.hp / p.maxHp) < 0.30;
     const spellCosts = {
         'Salto': 1, 'Insulto': 2, 'Empujon': 2, 'Cargar': 2, 'Lanzar': 2,
         'Puño': 3, 'Credito': 3, 'Uva': 3, 'Atraco': 3
     };
-    const cost = spellCosts[selectedSpell] || 3;
+    let cost = spellCosts[selectedSpell] || 3;
+    if(isHShieldMode && ['Empujon', 'Cargar', 'Lanzar'].includes(selectedSpell)) cost = 1;
     if(p.pa < cost) return false;
 
     if(selectedSpell === 'Credito') return d === 0;
@@ -616,6 +793,8 @@ function executeSpell(x,y) {
     const target = getEntityAt(x,y);
 
     // Validar PA según el costo del hechizo
+    // H en modo escudo: todos sus hechizos cuestan 1PA
+    const isHShieldMode = p.id === 'H' && (p.hp / p.maxHp) < 0.30;
     const spellCosts = {
         'Salto': 1,
         'Insulto': 2,
@@ -627,7 +806,8 @@ function executeSpell(x,y) {
         'Uva': 3,
         'Atraco': 3
     };
-    const cost = spellCosts[selectedSpell] || 3;
+    let cost = spellCosts[selectedSpell] || 3;
+    if(isHShieldMode && ['Empujon', 'Cargar', 'Lanzar'].includes(selectedSpell)) cost = 1;
     if(p.pa < cost) {
         log(`No tienes suficientes PA para usar ${selectedSpell} (necesitas ${cost})`, 'log-dmg');
         return;
@@ -644,25 +824,46 @@ function executeSpell(x,y) {
     }
     else if(selectedSpell === 'Insulto') {
         if(target && target !== p) {
-            // Solo se puede insultar una vez a cada objetivo
-            if(target.insulted) {
-                log(`${target.name} ya fue insultado. No puedes insultarlo de nuevo.`, 'log-dmg');
-                selectedSpell = null; draw(); return;
-            }
             applyDamage(target, 300000 + Math.random()*150000, selectedSpell, p);
             // Debuff: objetivo recibe +5% daño por 1 turno
             addEffect(target, 'vulnerability', 0.05, 1);
-            // Quita 1 PM fijo
-            target.pm = Math.max(0, target.pm - 1);
-            target.insulted = true; // Marcar como insultado
-            log(`${target.name} está debilitado: +5% daño recibido por 1 turno y -1 PM!`, 'log-dmg');
+
+            // Probabilidad de quitar 1 PA
+            if(Math.random() < 0.5) {
+                target.paPenalty = (target.paPenalty || 0) + 1;
+                log(`${target.name} queda confundido: -1 PA próximo turno!`, 'log-dmg');
+            }
+
+            // Atraer al objetivo 1 casilla hacia el Alemán
+            const dx = Math.sign(p.x - target.x);
+            const dy = Math.sign(p.y - target.y);
+            const newX = target.x + dx;
+            const newY = target.y + dy;
+            if(newX >= 0 && newX < SIZE && newY >= 0 && newY < SIZE &&
+               map[newY][newX] === 0 && !getEntityAt(newX, newY)) {
+                target.x = newX;
+                target.y = newY;
+                log(`${p.name} atrae a ${target.name} 1 casilla!`, 'log-dmg');
+            }
+
+            log(`${target.name} está debilitado: +5% daño recibido por 1 turno!`, 'log-dmg');
             p.pa -= 2; selectedSpell = null; draw(); return; // Cuesta 2 PA
         }
     }
     else if(selectedSpell === 'Atraco') {
         if(target && target !== p) {
-            const dmg = 300000 + Math.random()*150000;
+            // Sistema de combo: daño x2 por cada hit en el mismo turno
+            const comboMultiplier = Math.pow(2, atracoCombo); // 1x, 2x, 4x, 8x...
+            const baseDmg = 300000 + Math.random()*150000;
+            const dmg = baseDmg * comboMultiplier;
+
+            if(atracoCombo > 0) {
+                log(`🔥 ¡COMBO x${comboMultiplier}! Atraco potenciado!`, 'log-heal');
+            }
+
             applyDamage(target, dmg, selectedSpell, p);
+            atracoCombo++; // Incrementar combo para el próximo atraco
+
             // Kevin recupera 50% del daño infligido
             const kevin = players.find(pl => pl.id === 'K');
             const recovered = dmg * 0.50;
@@ -736,7 +937,16 @@ function executeSpell(x,y) {
                             log(`${target.name} fue empujado ${pushed} casilla(s) y CHOCÓ!`, 'log-dmg');
                         } else {
                             log(`${target.name} fue empujado ${pushed} casilla(s).`);
+                            // Trackear empujón sin daño para el combo
+                            if(!comboTracker[target.id]) comboTracker[target.id] = [];
+                            comboTracker[target.id].push({ spell: 'Empujon', dmg: 0 });
+                            notifyComboProgress(target.id);
                         }
+                    } else {
+                        // Empujón sin movimiento pero aún cuenta para combo
+                        if(!comboTracker[target.id]) comboTracker[target.id] = [];
+                        comboTracker[target.id].push({ spell: 'Empujon', dmg: 0 });
+                        notifyComboProgress(target.id);
                     }
                 }
             }
@@ -744,7 +954,7 @@ function executeSpell(x,y) {
             const resBonus = 0.07 + Math.random() * 0.05; // 7-12%
             addEffect(p, 'resistance', resBonus, 2);
             log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 2 turnos!`, 'log-heal');
-            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
+            p.pa -= cost; selectedSpell = null; draw(); return;
         }
     }
     else if(selectedSpell === 'Credito') {
@@ -790,12 +1000,19 @@ function executeSpell(x,y) {
             uva = {id:'U', name:'Uva 🐶', x, y, hp:800000, maxHp:800000};
             uvaUsed = true;
             log("¡Uva 🐶 ENTE DEL CAOS ha entrado al mapa! ¿Qué hará?");
-            // 1/2 de probabilidad: todos ganan +3PA por 2 turnos
+            // 1/2 de probabilidad: todos ganan PA por 2 turnos (+6 si GC, +3 normal)
             if(Math.random() < 0.5) {
+                const isCrit = rollCrit();
+                const paAmount = isCrit ? 6 : 3;
                 players.filter(pl => pl.hp > 0).forEach(pl => {
-                    addEffect(pl, 'paBonus', 3, 2);
+                    addEffect(pl, 'paBonus', paAmount, 2);
                 });
-                log("🐶💫 ¡La energía caótica de Uva inspira al equipo! +3 PA a todos por 2 turnos!", 'log-heal');
+                if(isCrit) {
+                    AudioManager.playSFX('critico');
+                    log("🐶💥 ¡¡GOLPE CRÍTICO!! ¡Uva desata su poder! +6 PA a todos por 2 turnos!", 'log-heal');
+                } else {
+                    log("🐶💫 ¡La energía caótica de Uva inspira al equipo! +3 PA a todos por 2 turnos!", 'log-heal');
+                }
             }
         }
     }
@@ -809,7 +1026,7 @@ function executeSpell(x,y) {
             AudioManager.playSFX('cargar');
             p.carried = target;
             log(`${p.name} cargó a ${target.name}`);
-            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
+            p.pa -= cost; selectedSpell = null; draw(); return;
         }
     }
     else if(selectedSpell === 'Lanzar') {
@@ -822,7 +1039,7 @@ function executeSpell(x,y) {
             const resBonus = 0.07 + Math.random() * 0.05; // 7-12%
             addEffect(p, 'resistance', resBonus, 2);
             log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 2 turnos!`, 'log-heal');
-            p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
+            p.pa -= cost; selectedSpell = null; draw(); return;
         }
     }
 
@@ -995,8 +1212,10 @@ function startEnemyTurn() {
                     // Sumar bonus de Uva (si los tiene)
                     const paBonus = pl.paBonus || 0;
                     const pmBonus = pl.pmBonus || 0;
+                    // H en modo escudo: +1PM
+                    const hShieldBonus = (pl.id === 'H' && pl.hp / pl.maxHp < 0.30) ? 1 : 0;
                     pl.pa = Math.max(0, 6 - paPenalty + paBonus);
-                    pl.pm = Math.max(0, 3 - pmPenalty + pmBonus);
+                    pl.pm = Math.max(0, 3 - pmPenalty + pmBonus + hShieldBonus);
                     // Limpiar penalizaciones y bonificaciones (solo duran 1 turno)
                     delete pl.paPenalty;
                     delete pl.pmPenalty;
@@ -1005,6 +1224,8 @@ function startEnemyTurn() {
                 }
             });
             processEffects(); // Procesar efectos temporales (reducir duración)
+            atracoCombo = 0; // Resetear combo de Atraco
+            comboTracker = {}; // Resetear tracker de combos
             enemyTurnActive = false; log("Tu turno Jovenes."); draw();
         }
     }, 1000);
@@ -1014,11 +1235,20 @@ function startEnemyTurn() {
 function commandUva(target) {
     if(!uva) return;
 
+    const joven = players.find(pl => pl.id === 'K');
+    const isEvolved = joven && (joven.hp / joven.maxHp) < 0.30;
     const isEnemy = target.id.includes('D');
     const isAlly = players.includes(target);
 
+    // Si Uva está evolucionada y el objetivo es un aliado, no hacer nada
+    if(isEvolved && isAlly) {
+        log(`⚡ Uva EVOLUCIONADA ignora a ${target.name}. Solo ataca enemigos!`, 'log-dmg');
+        return;
+    }
+
     // Uva se mueve hacia el objetivo
-    log(`${players[activeIdx].name} le ordena a Uva 🐶 ir hacia ${target.name}!`);
+    const uvaName = isEvolved ? 'Uva ⚡🐶⚡' : 'Uva 🐶';
+    log(`${players[activeIdx].name} le ordena a ${uvaName} ir hacia ${target.name}!`);
 
     // Mover Uva hacia el objetivo (hasta 5 PM)
     for (let i = 0; i < 5; i++) {
@@ -1035,39 +1265,96 @@ function commandUva(target) {
 
     // Verificar si llegó al objetivo
     if (Math.abs(uva.x - target.x) + Math.abs(uva.y - target.y) > 1) {
-        log(`Uva 🐶 no alcanzó a ${target.name}. Está muy lejos.`);
+        log(`${uvaName} no alcanzó a ${target.name}. Está muy lejos.`);
         return;
     }
 
-    // 40% de probabilidad de que Uva no quiera hacer nada
-    if (Math.random() < 0.4) {
-        log(`Uva 🐶 mira a ${target.name} y bosteza. No le da la gana.`);
-        return;
+    // Uva evolucionada: nunca falla, siempre ataca
+    if(!isEvolved) {
+        // 40% de probabilidad de que Uva no quiera hacer nada
+        if (Math.random() < 0.4) {
+            log(`${uvaName} mira a ${target.name} y bosteza. No le da la gana.`);
+            return;
+        }
     }
 
     if (isEnemy) {
-        // Atacar enemigo
-        const effect = Math.floor(Math.random() * 4);
-        switch(effect) {
-            case 0: // Mordida normal
-                const dmg = 500000 + Math.random() * 300000;
-                applyDamage(target, dmg, "Mordida 🐶", uva);
-                break;
-            case 1: // -2 PA
-                target.pa = Math.max(0, target.pa - 2);
-                log(`Uva 🐶 muerde a ${target.name}: -2 PA!`, 'log-dmg');
-                break;
-            case 2: // Vulnerabilidad
-                addEffect(target, 'vulnerability', 0.3, 2);
-                log(`Uva 🐶 intimida a ${target.name}: ¡+30% daño recibido por 2 turnos!`, 'log-dmg');
-                break;
-            case 3: // -1 PM
-                target.pm = Math.max(0, target.pm - 1);
-                log(`Uva 🐶 se interpone ante ${target.name}: -1 PM!`, 'log-dmg');
-                break;
+        if(isEvolved) {
+            // UVA EVOLUCIONADA: Ataque especial en cruz + empuja + quita 3PM
+            log(`⚡ ¡UVA EVOLUCIONADA ATACA!`, 'log-dmg');
+
+            // Empujar 1 casilla
+            const dx = Math.sign(target.x - uva.x);
+            const dy = Math.sign(target.y - uva.y);
+            const pushX = target.x + dx;
+            const pushY = target.y + dy;
+            if(pushX >= 0 && pushX < SIZE && pushY >= 0 && pushY < SIZE &&
+               map[pushY][pushX] === 0 && !getEntityAt(pushX, pushY)) {
+                target.x = pushX;
+                target.y = pushY;
+                log(`${uvaName} empuja a ${target.name} 1 casilla!`, 'log-dmg');
+            }
+
+            // Quitar 3 PM fijos
+            target.pm = Math.max(0, target.pm - 3);
+            log(`${uvaName} paraliza a ${target.name}: -3 PM!`, 'log-dmg');
+
+            // Ataque en zona en cruz (alcance 3 cardinales)
+            // Patrón:    X
+            //          X O X
+            //            X
+            const crossPositions = [
+                {x: uva.x, y: uva.y - 1}, {x: uva.x, y: uva.y - 2}, {x: uva.x, y: uva.y - 3}, // Arriba
+                {x: uva.x, y: uva.y + 1}, {x: uva.x, y: uva.y + 2}, {x: uva.x, y: uva.y + 3}, // Abajo
+                {x: uva.x - 1, y: uva.y}, {x: uva.x - 2, y: uva.y}, {x: uva.x - 3, y: uva.y}, // Izquierda
+                {x: uva.x + 1, y: uva.y}, {x: uva.x + 2, y: uva.y}, {x: uva.x + 3, y: uva.y}  // Derecha
+            ];
+
+            const zoneDmg = 400000 + Math.random() * 200000;
+            let hitCount = 0;
+            enemies.forEach(e => {
+                if(e.hp > 0 && crossPositions.some(pos => pos.x === e.x && pos.y === e.y)) {
+                    e.hp -= zoneDmg;
+                    log(`⚡ ${uvaName} aúlla y ${e.name} recibe ${fmt(zoneDmg)} en zona!`, 'log-dmg');
+                    hitCount++;
+                    if(e.hp <= 0) {
+                        e.hp = 0;
+                        log(`${e.name} fue liquidado por el aullido!`);
+                    }
+                }
+            });
+            if(hitCount > 0) {
+                AudioManager.playSFX('critico');
+            }
+
+            // Limpiar enemigos muertos
+            enemies = enemies.filter(e => e.hp > 0);
+            if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
+
+        } else {
+            // Atacar enemigo (Uva normal)
+            const effect = Math.floor(Math.random() * 4);
+            switch(effect) {
+                case 0: // Mordida normal
+                    const dmg = 500000 + Math.random() * 300000;
+                    applyDamage(target, dmg, "Mordida 🐶", uva);
+                    break;
+                case 1: // -2 PA
+                    target.pa = Math.max(0, target.pa - 2);
+                    log(`Uva 🐶 muerde a ${target.name}: -2 PA!`, 'log-dmg');
+                    break;
+                case 2: // Vulnerabilidad
+                    addEffect(target, 'vulnerability', 0.3, 2);
+                    log(`Uva 🐶 intimida a ${target.name}: ¡+30% daño recibido por 2 turnos!`, 'log-dmg');
+                    break;
+                case 3: // -1 PM
+                    target.pm = Math.max(0, target.pm - 1);
+                    log(`Uva 🐶 se interpone ante ${target.name}: -1 PM!`, 'log-dmg');
+                    break;
+            }
         }
-    } else if (isAlly) {
-        // Boostear aliado
+    } else if (isAlly && !isEvolved) {
+        // Boostear aliado (solo Uva normal)
         const effect = Math.floor(Math.random() * 4);
         switch(effect) {
             case 0: // +3 PA
