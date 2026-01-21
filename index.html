@@ -41,6 +41,15 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 .log-heal{color:#4dff4d;}
 #end-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.9);z-index:999;}
 .hidden{display:none !important;}
+/* Efecto de furia del Alemán */
+@keyframes fury-pulse {
+    0%, 100% { box-shadow: inset 0 0 15px rgba(255,0,0,0.8), 0 0 10px rgba(255,0,0,0.6); }
+    50% { box-shadow: inset 0 0 25px rgba(255,80,0,1), 0 0 20px rgba(255,50,0,0.9); }
+}
+.cell.fury { animation: fury-pulse 0.5s ease-in-out infinite; border: 2px solid #ff3300 !important; }
+.portrait.fury { animation: fury-pulse 0.5s ease-in-out infinite; border-color: #ff3300 !important; }
+.hp-fill.fury { background: linear-gradient(90deg, #ff0000, #ff6600, #ff0000); background-size: 200% 100%; animation: fury-bar 0.5s linear infinite; }
+@keyframes fury-bar { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
 </style>
 </head>
 <body>
@@ -301,14 +310,25 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
     }
 
     // === HABILIDADES PASIVAS ===
-    // El Alemán: más daño con menos vida (hasta +100% con 0% vida)
+    // El Alemán: más daño cuando está muy bajo de vida
+    // <10% = +300%, <20% = +200%
     if(attacker.id === 'J') {
         const hpPercent = attacker.hp / attacker.maxHp;
-        const passiveBonus = (1 - hpPercent); // 0% vida = +100%, 50% vida = +50%, 100% vida = +0%
-        if(passiveBonus > 0.05) { // Solo mostrar si es significativo (>5%)
+        let passiveBonus = 0;
+        let furyLevel = '';
+
+        if(hpPercent < 0.10) {
+            passiveBonus = 3.0; // <10% HP = +300% (cuádruple daño)
+            furyLevel = '¡¡FURIA APOCALÍPTICA!!';
+        } else if(hpPercent < 0.20) {
+            passiveBonus = 2.0; // <20% HP = +200% (triple daño)
+            furyLevel = '¡FURIA EXTREMA!';
+        }
+
+        if(passiveBonus > 0) {
             const bonus = finalDmg * passiveBonus;
             finalDmg += bonus;
-            log(`🔥 Furia del Alemán: +${Math.round(passiveBonus*100)}% daño (+${fmt(bonus)})`, 'log-heal');
+            log(`🔥 ${furyLevel}: +${Math.round(passiveBonus*100)}% daño (+${fmt(bonus)})`, 'log-heal');
         }
     }
 
@@ -391,6 +411,10 @@ function draw() {
                 if(ent.id === highlightedEnemy) {
                     cell.classList.add('enemy-highlighted');
                 }
+                // Efecto de furia del Alemán (< 20% vida)
+                if(ent.id === 'J' && ent.hp / ent.maxHp < 0.20) {
+                    cell.classList.add('fury');
+                }
             }
             if(isMoving && reachMap.has(`${x},${y}`)) cell.classList.add('move');
             if(selectedSpell && checkSpellRange(x,y)) cell.classList.add('spell');
@@ -428,10 +452,16 @@ function updateUI() {
         if(pl.resistance) buffs += `<span style="color:#3498db;">+${Math.round(pl.resistance*100)}%RES</span> `;
         if(pl.vulnerability) buffs += `<span style="color:#e74c3c;">-${Math.round(pl.vulnerability*100)}%DEF</span> `;
 
+        // Clase especial para Alemán en furia
+        const isFury = pl.id === 'J' && pct < 20;
+        let hpFillClass = 'hp-fill';
+        if(pl.id === 'K') hpFillClass += ' kevin';
+        if(isFury) hpFillClass += ' fury';
+
         row.innerHTML = `
-            <span class="hp-name">${pl.name}</span>
+            <span class="hp-name">${pl.name}${isFury ? ' 🔥' : ''}</span>
             <div class="hp-bar">
-                <div class="hp-fill ${pl.id === 'K' ? 'kevin' : ''}" style="width:${pct}%"></div>
+                <div class="${hpFillClass}" style="width:${pct}%"></div>
             </div>
             <span class="hp-cop">${fmt(pl.hp)}</span>
             <span style="font-size:9px; min-width:50px; text-align:center;">PA:${pl.pa} PM:${pl.pm}</span>
@@ -446,7 +476,8 @@ function updateUI() {
     players.forEach((pl, i) => {
         if(pl.hp <= 0) return;
         const div = document.createElement('div');
-        div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''}`;
+        const isFury = pl.id === 'J' && (pl.hp / pl.maxHp) < 0.20;
+        div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''} ${isFury?'fury':''}`;
         const img = document.createElement('img'); img.src = spriteMap[pl.id];
         div.appendChild(img);
         div.onclick = () => { if(!enemyTurnActive){ activeIdx=i; resetActions(); draw(); }};
@@ -540,6 +571,15 @@ function onCellClick(x,y, cost) {
 function checkSpellRange(x,y) {
     const p = players[activeIdx];
     const d = Math.abs(p.x-x) + Math.abs(p.y-y);
+
+    // Validar PA antes de mostrar rango
+    const spellCosts = {
+        'Salto': 1, 'Insulto': 2, 'Empujon': 2, 'Cargar': 2, 'Lanzar': 2,
+        'Puño': 3, 'Credito': 3, 'Uva': 3, 'Atraco': 3
+    };
+    const cost = spellCosts[selectedSpell] || 3;
+    if(p.pa < cost) return false;
+
     if(selectedSpell === 'Credito') return d === 0;
     if(['Puño','Empujon','Cargar'].includes(selectedSpell)) return d === 1;
     // Uva: invocar (adyacente), intercambiar (sobre Uva), o comandar (sobre enemigo/aliado si Uva existe)
@@ -549,7 +589,18 @@ function checkSpellRange(x,y) {
         return d === 1 && !uvaUsed; // Invocar (solo si no ha sido invocada)
     }
     if(selectedSpell === 'Insulto') return (p.x===x || p.y===y) && d >= 2 && d <= 3;
-    if(selectedSpell === 'Salto') return d === 4 && !getEntityAt(x,y) && map[y][x]===0;
+    // Salto: cardinales 2-5, diagonales 1-4
+    if(selectedSpell === 'Salto') {
+        const dx = Math.abs(p.x - x);
+        const dy = Math.abs(p.y - y);
+        const isCardinal = (dx === 0 || dy === 0);
+        const isDiagonal = (dx === dy);
+        if(!getEntityAt(x,y) && map[y][x] === 0) {
+            if(isCardinal && d >= 2 && d <= 5) return true;
+            if(isDiagonal && d >= 1 && d <= 4) return true;
+        }
+        return false;
+    }
     // Atraco: SOLO diagonales (1 casilla)
     if(selectedSpell === 'Atraco') {
         const dx = Math.abs(p.x - x);
@@ -612,11 +663,16 @@ function executeSpell(x,y) {
         if(target && target !== p) {
             const dmg = 300000 + Math.random()*150000;
             applyDamage(target, dmg, selectedSpell, p);
-            // Kevin recupera 10% del daño infligido
+            // Kevin recupera 50% del daño infligido
             const kevin = players.find(pl => pl.id === 'K');
-            const recovered = dmg * 0.10;
+            const recovered = dmg * 0.50;
             kevin.hp = Math.min(kevin.maxHp, kevin.hp + recovered);
             log(`${kevin.name} recupera ${fmt(recovered)} del atraco!`, 'log-heal');
+            // Intercambiar posiciones con el objetivo
+            const oldX = p.x, oldY = p.y;
+            p.x = target.x; p.y = target.y;
+            target.x = oldX; target.y = oldY;
+            log(`${p.name} intercambió posición con ${target.name}!`, 'log-heal');
         }
     }
     else if(selectedSpell === 'Empujon') {
@@ -684,16 +740,16 @@ function executeSpell(x,y) {
                     }
                 }
             }
-            // Pasiva de H: gana 3-5% resistencia por empujar (dura 3 turnos)
-            const resBonus = 0.03 + Math.random() * 0.02; // 3-5%
-            addEffect(p, 'resistance', resBonus, 3);
-            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 3 turnos!`, 'log-heal');
+            // Pasiva de H: gana 7-12% resistencia por empujar (dura 2 turnos)
+            const resBonus = 0.07 + Math.random() * 0.05; // 7-12%
+            addEffect(p, 'resistance', resBonus, 2);
+            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 2 turnos!`, 'log-heal');
             p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
     }
     else if(selectedSpell === 'Credito') {
         AudioManager.playSFX('credito');
-        let heal = 390621;
+        let heal = 550000;
         const isCrit = rollCrit();
         if(isCrit) {
             heal *= CRIT_MULTIPLIER;
@@ -734,6 +790,13 @@ function executeSpell(x,y) {
             uva = {id:'U', name:'Uva 🐶', x, y, hp:800000, maxHp:800000};
             uvaUsed = true;
             log("¡Uva 🐶 ENTE DEL CAOS ha entrado al mapa! ¿Qué hará?");
+            // 1/2 de probabilidad: todos ganan +3PA por 2 turnos
+            if(Math.random() < 0.5) {
+                players.filter(pl => pl.hp > 0).forEach(pl => {
+                    addEffect(pl, 'paBonus', 3, 2);
+                });
+                log("🐶💫 ¡La energía caótica de Uva inspira al equipo! +3 PA a todos por 2 turnos!", 'log-heal');
+            }
         }
     }
     else if(selectedSpell === 'Salto') {
@@ -755,10 +818,10 @@ function executeSpell(x,y) {
             p.carried.x = x; p.carried.y = y;
             log(`${p.name} lanzó a ${p.carried.name}`);
             p.carried = null;
-            // Pasiva de H: gana 3-5% resistencia por lanzar (dura 3 turnos)
-            const resBonus = 0.03 + Math.random() * 0.02; // 3-5%
-            addEffect(p, 'resistance', resBonus, 3);
-            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 3 turnos!`, 'log-heal');
+            // Pasiva de H: gana 7-12% resistencia por lanzar (dura 2 turnos)
+            const resBonus = 0.07 + Math.random() * 0.05; // 7-12%
+            addEffect(p, 'resistance', resBonus, 2);
+            log(`🛡️ Fortaleza de H: +${Math.round(resBonus*100)}% resistencia por 2 turnos!`, 'log-heal');
             p.pa -= 2; selectedSpell = null; draw(); return; // H: 2 PA
         }
     }
@@ -817,17 +880,43 @@ function startEnemyTurn() {
 
             if(!target) return;
 
-            // Movimiento hacia el objetivo
+            // Movimiento hacia el objetivo - priorizar cuerpo a cuerpo
+            let movedThisTurn = false;
             for(let i=0; i<e.pm; i++) {
-                if(Math.abs(e.x-target.x)+Math.abs(e.y-target.y) <= 1) break;
+                const currentDist = Math.abs(e.x-target.x)+Math.abs(e.y-target.y);
+                if(currentDist <= 1) break; // Ya está adyacente
+
                 let reach = calculateReach(e.x, e.y, 1);
-                let best = {x:e.x, y:e.y, d:999};
+                let best = null;
+                let bestDist = currentDist;
+
                 for(let key of reach.keys()) {
                     let [nx, ny] = key.split(',').map(Number);
                     let d = Math.abs(nx-target.x)+Math.abs(ny-target.y);
-                    if(d < best.d) best = {x:nx, y:ny, d:d};
+                    if(d < bestDist) {
+                        best = {x:nx, y:ny};
+                        bestDist = d;
+                    }
                 }
-                e.x = best.x; e.y = best.y;
+
+                // Si encontró mejor posición, moverse
+                if(best) {
+                    e.x = best.x;
+                    e.y = best.y;
+                    movedThisTurn = true;
+                } else {
+                    // No puede acercarse más, intentar rodear obstáculos
+                    // Buscar cualquier casilla que no sea la actual
+                    for(let key of reach.keys()) {
+                        let [nx, ny] = key.split(',').map(Number);
+                        if(nx !== e.x || ny !== e.y) {
+                            e.x = nx; e.y = ny;
+                            movedThisTurn = true;
+                            break;
+                        }
+                    }
+                    if(!movedThisTurn) break; // Completamente bloqueado
+                }
             }
 
             // DESPUÉS de moverse: reconsiderar objetivo para "Hola perdido!"
@@ -1114,6 +1203,7 @@ function addEffect(target, type, value, turns = 2) {
     if(type === 'dmgBoost') target.dmgBoost = (target.dmgBoost || 0) + value;
     if(type === 'resistance') target.resistance = (target.resistance || 0) + value;
     if(type === 'vulnerability') target.vulnerability = (target.vulnerability || 0) + value;
+    if(type === 'paBonus') target.paBonus = (target.paBonus || 0) + value;
 }
 
 function processEffects() {
@@ -1138,6 +1228,11 @@ function processEffects() {
                     target.vulnerability = (target.vulnerability || 0) - eff.value;
                     if(target.vulnerability <= 0) delete target.vulnerability;
                     log(`La debilidad de ${target.name} ha expirado.`);
+                }
+                if(eff.type === 'paBonus') {
+                    target.paBonus = (target.paBonus || 0) - eff.value;
+                    if(target.paBonus <= 0) delete target.paBonus;
+                    log(`El bonus de PA de ${target.name} ha expirado.`);
                 }
             }
             return false; // Eliminar de la lista
