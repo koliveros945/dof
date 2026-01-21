@@ -25,7 +25,7 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 .enemy-card{background:#111;border:2px solid #e74c3c;border-radius:8px;padding:6px 10px;min-width:130px;text-align:center;font-size:10px;transition:all 0.3s;}
 .enemy-card.highlighted{border-color:#f39c12;box-shadow:0 0 15px rgba(243,156,18,0.8);transform:scale(1.05);}
 .cell.enemy-highlighted{box-shadow:inset 0 0 20px rgba(243,156,18,0.9);border:2px solid #f39c12 !important;}
-#grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;margin:10px auto;border:3px solid #333;padding:4px;background:#111;}
+#grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;border:3px solid #333;padding:4px;background:#111;border-radius:8px;}
 .cell{width:52px;height:52px;background:#000;border:1px solid #2a5a2a;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
 .cell img{width:95%; height:95%; object-fit:contain; z-index:2;}
 .wall{background:#444;border-color:#222;cursor:default;}
@@ -103,6 +103,85 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
     }
 }
 .cell.uva-evolved { animation: uva-evolved 0.6s ease-in-out infinite; border: 2px solid #f1c40f !important; }
+
+/* === PANELES LATERALES === */
+#game-area {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 15px;
+    margin: 10px auto;
+}
+.side-panel {
+    width: 180px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 10px;
+    color: #ccc;
+}
+.panel-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #f39c12;
+    text-align: center;
+    padding: 5px;
+    background: rgba(243,156,18,0.15);
+    border-radius: 5px;
+    margin-bottom: 8px;
+}
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.rule-item, .passive-item, .tip-item {
+    padding: 5px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 4px;
+    line-height: 1.3;
+}
+.char-tag {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: bold;
+    margin-right: 3px;
+}
+.char-tag.aleman { background: #c0392b; color: #fff; }
+.char-tag.joven { background: #f39c12; color: #000; }
+.char-tag.h-char { background: #3498db; color: #fff; }
+.char-tag.uva-tag { background: #9b59b6; color: #fff; }
+.combo-item {
+    padding: 6px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 5px;
+    border-left: 3px solid #f39c12;
+}
+.combo-name {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 3px;
+}
+.combo-seq {
+    color: #aaa;
+    font-size: 9px;
+    margin-bottom: 2px;
+}
+.combo-bonus {
+    color: #2ecc71;
+    font-weight: bold;
+    font-size: 9px;
+}
+.tip-item {
+    font-size: 9px;
+    color: #aaa;
+}
+.tip-item b {
+    color: #f39c12;
+}
 </style>
 </head>
 <body>
@@ -117,7 +196,58 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 </div>
 
 <div id="enemy-panels"></div>
-<div id="grid"></div>
+
+<div id="game-area">
+    <!-- Panel izquierdo: Reglas -->
+    <div id="panel-left" class="side-panel">
+        <div class="panel-title">📜 REGLAS</div>
+        <div class="panel-section">
+            <div class="rule-item">💀 Si <b>El Joven</b> llega a $0, pierdes la partida</div>
+            <div class="rule-item">🎯 Elimina a todos los Escotes para ganar el nivel</div>
+            <div class="rule-item">⚡ PA = Puntos de Acción (hechizos)</div>
+            <div class="rule-item">🦶 PM = Puntos de Movimiento</div>
+        </div>
+        <div class="panel-title" style="margin-top:10px;">🔥 PASIVAS</div>
+        <div class="panel-section">
+            <div class="passive-item"><span class="char-tag aleman">Alemán</span> <50% HP = x2 daño<br/><30% HP = x3 daño</div>
+            <div class="passive-item"><span class="char-tag joven">Joven</span> Más HP = más daño (hasta +50%)</div>
+            <div class="passive-item"><span class="char-tag h-char">H</span> Aliado <35% HP = aura que da +30% resistencia a adyacentes</div>
+            <div class="passive-item"><span class="char-tag uva-tag">Uva</span> Joven <30% HP = Uva evoluciona (nunca falla, ataque en cruz)</div>
+        </div>
+    </div>
+
+    <!-- Tablero central -->
+    <div id="grid"></div>
+
+    <!-- Panel derecho: Combos -->
+    <div id="panel-right" class="side-panel">
+        <div class="panel-title">⚔️ COMBOS</div>
+        <div class="panel-section">
+            <div class="combo-item">
+                <div class="combo-name">🥊 COMBO CLÁSICO</div>
+                <div class="combo-seq">Empujón → Atraco → Puño</div>
+                <div class="combo-bonus">+1.5M daño puro (ignora resistencias)</div>
+            </div>
+            <div class="combo-item">
+                <div class="combo-name">💰 COMBO LADRÓN</div>
+                <div class="combo-seq">Atraco → Empujón → Puño</div>
+                <div class="combo-bonus">+1.5M daño puro (ignora resistencias)</div>
+            </div>
+            <div class="combo-item">
+                <div class="combo-name">🔗 ATRACO EN CADENA</div>
+                <div class="combo-seq">Diagonal → Diagonal → ...</div>
+                <div class="combo-bonus">x2 daño por cada enemigo en diagonal (3+ = combo)</div>
+            </div>
+        </div>
+        <div class="panel-title" style="margin-top:10px;">💡 TIPS</div>
+        <div class="panel-section">
+            <div class="tip-item">• Usa <b>Insulto</b> para debilitar enemigos (-PA y +daño recibido)</div>
+            <div class="tip-item">• <b>Crédito</b> cura aliados adyacentes al Joven</div>
+            <div class="tip-item">• <b>Uva</b> puede boostear aliados o atacar enemigos</div>
+            <div class="tip-item">• Mantén a H cerca de aliados heridos para protegerlos</div>
+        </div>
+    </div>
+</div>
 
 <div id="spellbar">
     <div id="spells-inner" style="display:flex; gap:8px;"></div>
@@ -178,8 +308,26 @@ const AudioManager = {
             this.music.pause();
             this.music.currentTime = 0;
         }
+    },
+
+    // Intentar reproducir música (para después de interacción del usuario)
+    tryPlayMusic() {
+        if(this.music && this.music.paused) {
+            this.music.play().catch(e => {});
+        }
     }
 };
+
+// Iniciar música con la primera interacción del usuario
+let musicStarted = false;
+function startMusicOnInteraction() {
+    if(!musicStarted) {
+        AudioManager.tryPlayMusic();
+        musicStarted = true;
+    }
+}
+document.addEventListener('click', startMusicOnInteraction, { once: false });
+document.addEventListener('keydown', startMusicOnInteraction, { once: false });
 
 // Mapeo de hechizos a efectos de sonido
 const spellSFX = {
@@ -237,7 +385,6 @@ let selectedSpell = null;
 let isMoving = false;
 let activeEffects = []; // Sistema de efectos temporales: {target, type, value, turnsLeft}
 let highlightedEnemy = null; // Enemigo resaltado al hacer clic
-let atracoCombo = 0; // Contador de combo de Atraco (se resetea cada turno)
 let comboTracker = {}; // Trackea ataques recibidos por cada objetivo este turno: {targetId: [{spell, dmg}, ...]}
 
 // ===== INICIALIZACIÓN =====
@@ -365,19 +512,19 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
     }
 
     // === HABILIDADES PASIVAS ===
-    // El Alemán: más daño cuando está muy bajo de vida
-    // <10% = +300%, <20% = +200%
+    // El Alemán: más daño cuando está bajo de vida
+    // <30% = +200% (triple), 30-50% = +100% (doble)
     if(attacker.id === 'J') {
         const hpPercent = attacker.hp / attacker.maxHp;
         let passiveBonus = 0;
         let furyLevel = '';
 
-        if(hpPercent < 0.10) {
-            passiveBonus = 3.0; // <10% HP = +300% (cuádruple daño)
-            furyLevel = '¡¡FURIA APOCALÍPTICA!!';
-        } else if(hpPercent < 0.20) {
-            passiveBonus = 2.0; // <20% HP = +200% (triple daño)
-            furyLevel = '¡FURIA EXTREMA!';
+        if(hpPercent < 0.30) {
+            passiveBonus = 2.0; // <30% HP = +200% (triple daño)
+            furyLevel = '¡¡FURIA EXTREMA!!';
+        } else if(hpPercent < 0.50) {
+            passiveBonus = 1.0; // 30-50% HP = +100% (doble daño)
+            furyLevel = '¡FURIA!';
         }
 
         if(passiveBonus > 0) {
@@ -466,13 +613,11 @@ function checkAndApplyCombo(target) {
     // Combo 1: Empujon + Atraco + Puño
     // Combo 2: Atraco + Empujon + Puño
     if(sequence === 'Empujon+Atraco+Puño' || sequence === 'Atraco+Empujon+Puño') {
-        // Daño bonus = daño de Atraco + daño de Puño (ignorando resistencias)
-        const atracoDmg = last3.find(h => h.spell === 'Atraco')?.dmg || 0;
-        const punoDmg = last3.find(h => h.spell === 'Puño')?.dmg || 0;
-        const bonusDmg = atracoDmg + punoDmg;
+        // Daño bonus FIJO de 1,500,000 que IGNORA resistencias
+        const bonusDmg = 1500000;
 
         target.hp -= bonusDmg;
-        log(`💥💥💥 ¡¡COMBO DEVASTADOR!! ${target.name} recibe ${fmt(bonusDmg)} de daño adicional!`, 'log-dmg');
+        log(`💥💥💥 ¡¡COMBO DEVASTADOR!! ${target.name} recibe ${fmt(bonusDmg)} de daño PURO adicional!`, 'log-dmg');
         AudioManager.playSFX('critico');
 
         // Limpiar el combo tracker para este objetivo (no se puede repetir inmediatamente)
@@ -555,17 +700,17 @@ function draw() {
                 if(ent.id === highlightedEnemy) {
                     cell.classList.add('enemy-highlighted');
                 }
-                // Efecto de furia del Alemán (< 20% vida)
-                if(ent.id === 'J' && ent.hp / ent.maxHp < 0.20) {
+                // Efecto de furia del Alemán (< 50% vida)
+                if(ent.id === 'J' && ent.hp / ent.maxHp < 0.50) {
                     cell.classList.add('fury');
                 }
                 // Efecto Ultra Instinto - Alemán puede completar combo con Puño
                 if(comboInfo && comboInfo.finisher === 'Puño' && ent.id === 'J' && ent.hp > 0) {
                     cell.classList.add('ultra-instinct');
                 }
-                // Efecto Modo Escudo de H (< 30% vida)
-                const hPlayer = players.find(pl => pl.id === 'H');
-                if(ent.id === 'H' && hPlayer && hPlayer.hp / hPlayer.maxHp < 0.30) {
+                // Efecto Modo Escudo de H (algún aliado < 35% vida)
+                const anyAllyLowHP = players.some(ally => ally.hp > 0 && (ally.hp / ally.maxHp) < 0.35);
+                if(ent.id === 'H' && anyAllyLowHP) {
                     cell.classList.add('shield-mode');
                 }
                 // Efecto Uva Evolucionada (Joven < 30% vida)
@@ -610,10 +755,11 @@ function updateUI() {
         if(pl.resistance) buffs += `<span style="color:#3498db;">+${Math.round(pl.resistance*100)}%RES</span> `;
         if(pl.vulnerability) buffs += `<span style="color:#e74c3c;">-${Math.round(pl.vulnerability*100)}%DEF</span> `;
 
-        // Clase especial para Alemán en furia
-        const isFury = pl.id === 'J' && pct < 20;
-        // Clase especial para H en modo escudo
-        const isShieldMode = pl.id === 'H' && pct < 30;
+        // Clase especial para Alemán en furia (activa desde 50% HP)
+        const isFury = pl.id === 'J' && pct < 50;
+        // Clase especial para H en modo escudo (aliado < 35%)
+        const anyAllyLow = players.some(ally => ally.hp > 0 && (ally.hp / ally.maxHp) < 0.35);
+        const isShieldMode = pl.id === 'H' && anyAllyLow;
         let hpFillClass = 'hp-fill';
         if(pl.id === 'K') hpFillClass += ' kevin';
         if(isFury) hpFillClass += ' fury';
@@ -646,8 +792,9 @@ function updateUI() {
     players.forEach((pl, i) => {
         if(pl.hp <= 0) return;
         const div = document.createElement('div');
-        const isFury = pl.id === 'J' && (pl.hp / pl.maxHp) < 0.20;
-        const isShieldMode = pl.id === 'H' && (pl.hp / pl.maxHp) < 0.30;
+        const isFury = pl.id === 'J' && (pl.hp / pl.maxHp) < 0.50;
+        const anyAllyLow = players.some(ally => ally.hp > 0 && (ally.hp / ally.maxHp) < 0.35);
+        const isShieldMode = pl.id === 'H' && anyAllyLow;
         const isUltraInstinct = comboInfo && comboInfo.finisher === 'Puño' && pl.id === 'J';
         div.className = `portrait ${i===activeIdx?'active':''} ${!enemyTurnActive && i===activeIdx?'turn':''} ${isFury?'fury':''} ${isShieldMode?'shield-mode':''} ${isUltraInstinct?'ultra-instinct':''}`;
         const img = document.createElement('img'); img.src = spriteMap[pl.id];
@@ -747,14 +894,11 @@ function checkSpellRange(x,y) {
     const d = Math.abs(p.x-x) + Math.abs(p.y-y);
 
     // Validar PA antes de mostrar rango
-    // H en modo escudo: todos sus hechizos cuestan 1PA
-    const isHShieldMode = p.id === 'H' && (p.hp / p.maxHp) < 0.30;
     const spellCosts = {
         'Salto': 1, 'Insulto': 2, 'Empujon': 2, 'Cargar': 2, 'Lanzar': 2,
         'Puño': 3, 'Credito': 3, 'Uva': 3, 'Atraco': 3
     };
     let cost = spellCosts[selectedSpell] || 3;
-    if(isHShieldMode && ['Empujon', 'Cargar', 'Lanzar'].includes(selectedSpell)) cost = 1;
     if(p.pa < cost) return false;
 
     if(selectedSpell === 'Credito') return d === 0;
@@ -793,8 +937,6 @@ function executeSpell(x,y) {
     const target = getEntityAt(x,y);
 
     // Validar PA según el costo del hechizo
-    // H en modo escudo: todos sus hechizos cuestan 1PA
-    const isHShieldMode = p.id === 'H' && (p.hp / p.maxHp) < 0.30;
     const spellCosts = {
         'Salto': 1,
         'Insulto': 2,
@@ -807,7 +949,6 @@ function executeSpell(x,y) {
         'Atraco': 3
     };
     let cost = spellCosts[selectedSpell] || 3;
-    if(isHShieldMode && ['Empujon', 'Cargar', 'Lanzar'].includes(selectedSpell)) cost = 1;
     if(p.pa < cost) {
         log(`No tienes suficientes PA para usar ${selectedSpell} (necesitas ${cost})`, 'log-dmg');
         return;
@@ -852,28 +993,75 @@ function executeSpell(x,y) {
     }
     else if(selectedSpell === 'Atraco') {
         if(target && target !== p) {
-            // Sistema de combo: daño x2 por cada hit en el mismo turno
-            const comboMultiplier = Math.pow(2, atracoCombo); // 1x, 2x, 4x, 8x...
-            const baseDmg = 300000 + Math.random()*150000;
-            const dmg = baseDmg * comboMultiplier;
+            // === ATRACO EN CADENA DIAGONAL ===
+            // Busca enemigos en cadena diagonal: cada uno en diagonal del anterior
+            // Daño se duplica con cada objetivo en la cadena
 
-            if(atracoCombo > 0) {
-                log(`🔥 ¡COMBO x${comboMultiplier}! Atraco potenciado!`, 'log-heal');
+            const chain = [target]; // Cadena de objetivos
+            let currentPos = { x: target.x, y: target.y };
+
+            // Buscar más enemigos en diagonales del objetivo actual
+            const diagonals = [{dx:1,dy:1}, {dx:1,dy:-1}, {dx:-1,dy:1}, {dx:-1,dy:-1}];
+
+            // Función para buscar siguiente en cadena
+            function findNextInChain(fromX, fromY, excludeIds) {
+                for(const dir of diagonals) {
+                    const nx = fromX + dir.dx;
+                    const ny = fromY + dir.dy;
+                    const ent = getEntityAt(nx, ny);
+                    if(ent && ent.id && ent.id.includes('D') && ent.hp > 0 && !excludeIds.includes(ent.id)) {
+                        return ent;
+                    }
+                }
+                return null;
             }
 
-            applyDamage(target, dmg, selectedSpell, p);
-            atracoCombo++; // Incrementar combo para el próximo atraco
+            // Construir cadena (buscar hasta que no haya más)
+            let excludeIds = [target.id];
+            let next = findNextInChain(currentPos.x, currentPos.y, excludeIds);
+            while(next) {
+                chain.push(next);
+                excludeIds.push(next.id);
+                currentPos = { x: next.x, y: next.y };
+                next = findNextInChain(currentPos.x, currentPos.y, excludeIds);
+            }
 
-            // Kevin recupera 50% del daño infligido
+            // Aplicar daño en cadena con multiplicador x2 por cada objetivo
+            const baseDmg = 300000 + Math.random() * 150000;
+            let totalRecovered = 0;
+
+            if(chain.length >= 3) {
+                log(`💥 ¡¡ATRACO EN CADENA x${chain.length}!! 🔗`, 'log-dmg');
+                AudioManager.playSFX('critico');
+            }
+
+            chain.forEach((enemy, idx) => {
+                const multiplier = Math.pow(2, idx); // 1x, 2x, 4x, 8x...
+                const dmg = baseDmg * multiplier;
+
+                if(idx > 0) {
+                    log(`🔗 Cadena ${idx + 1}: x${multiplier} daño!`, 'log-heal');
+                }
+
+                applyDamage(enemy, dmg, idx === 0 ? selectedSpell : `Atraco (cadena x${multiplier})`, p);
+                totalRecovered += dmg * 0.50;
+
+                // Intercambiar posición con cada objetivo (uno por uno)
+                const oldX = p.x, oldY = p.y;
+                p.x = enemy.x; p.y = enemy.y;
+                enemy.x = oldX; enemy.y = oldY;
+            });
+
+            // Kevin recupera 50% del daño total infligido
             const kevin = players.find(pl => pl.id === 'K');
-            const recovered = dmg * 0.50;
-            kevin.hp = Math.min(kevin.maxHp, kevin.hp + recovered);
-            log(`${kevin.name} recupera ${fmt(recovered)} del atraco!`, 'log-heal');
-            // Intercambiar posiciones con el objetivo
-            const oldX = p.x, oldY = p.y;
-            p.x = target.x; p.y = target.y;
-            target.x = oldX; target.y = oldY;
-            log(`${p.name} intercambió posición con ${target.name}!`, 'log-heal');
+            kevin.hp = Math.min(kevin.maxHp, kevin.hp + totalRecovered);
+            log(`${kevin.name} recupera ${fmt(totalRecovered)} del atraco!`, 'log-heal');
+
+            if(chain.length > 1) {
+                log(`${p.name} atravesó ${chain.length} enemigos!`, 'log-heal');
+            } else {
+                log(`${p.name} intercambió posición con ${target.name}!`, 'log-heal');
+            }
         }
     }
     else if(selectedSpell === 'Empujon') {
@@ -1212,10 +1400,8 @@ function startEnemyTurn() {
                     // Sumar bonus de Uva (si los tiene)
                     const paBonus = pl.paBonus || 0;
                     const pmBonus = pl.pmBonus || 0;
-                    // H en modo escudo: +1PM
-                    const hShieldBonus = (pl.id === 'H' && pl.hp / pl.maxHp < 0.30) ? 1 : 0;
                     pl.pa = Math.max(0, 6 - paPenalty + paBonus);
-                    pl.pm = Math.max(0, 3 - pmPenalty + pmBonus + hShieldBonus);
+                    pl.pm = Math.max(0, 3 - pmPenalty + pmBonus);
                     // Limpiar penalizaciones y bonificaciones (solo duran 1 turno)
                     delete pl.paPenalty;
                     delete pl.pmPenalty;
@@ -1223,8 +1409,26 @@ function startEnemyTurn() {
                     delete pl.pmBonus;
                 }
             });
+
+            // === AURA PROTECTORA DE H ===
+            // Si algún aliado tiene <35% HP, H otorga +30% resistencia a aliados adyacentes
+            const hPlayer = players.find(pl => pl.id === 'H' && pl.hp > 0);
+            const anyAllyLow = players.some(ally => ally.hp > 0 && (ally.hp / ally.maxHp) < 0.35);
+            if(hPlayer && anyAllyLow) {
+                const adjacentAllies = players.filter(ally =>
+                    ally.hp > 0 &&
+                    ally.id !== 'H' &&
+                    Math.abs(ally.x - hPlayer.x) + Math.abs(ally.y - hPlayer.y) === 1
+                );
+                if(adjacentAllies.length > 0) {
+                    adjacentAllies.forEach(ally => {
+                        addEffect(ally, 'resistance', 0.30, 1);
+                    });
+                    log(`🛡️ ¡AURA PROTECTORA de H! +30% resistencia a ${adjacentAllies.map(a => a.name).join(', ')} por 1 turno`, 'log-heal');
+                }
+            }
+
             processEffects(); // Procesar efectos temporales (reducir duración)
-            atracoCombo = 0; // Resetear combo de Atraco
             comboTracker = {}; // Resetear tracker de combos
             enemyTurnActive = false; log("Tu turno Jovenes."); draw();
         }
