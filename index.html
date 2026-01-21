@@ -26,9 +26,85 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 .enemy-card.highlighted{border-color:#f39c12;box-shadow:0 0 15px rgba(243,156,18,0.8);transform:scale(1.05);}
 .enemy-card.boss-card{border-color:#8e44ad;background:linear-gradient(180deg,#1a0a1a 0%,#2d1f3d 100%);min-width:180px;box-shadow:0 0 10px rgba(142,68,173,0.5);}
 .cell.enemy-highlighted{box-shadow:inset 0 0 20px rgba(243,156,18,0.9);border:2px solid #f39c12 !important;}
-#grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;border:3px solid #333;padding:4px;background:#111;border-radius:8px;}
+#grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;border:3px solid #333;padding:4px;background:#111;border-radius:8px;position:relative;image-rendering:pixelated;}
+
+/* === ESCENARIO CALLE/CIUDAD (Nivel 1-2) === */
+#grid.scene-street{
+    background:
+        linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+    border-color: #3d3d5c;
+}
+#grid.scene-street .cell{
+    background:
+        linear-gradient(135deg, #2d2d44 25%, transparent 25%),
+        linear-gradient(225deg, #2d2d44 25%, transparent 25%),
+        linear-gradient(45deg, #2d2d44 25%, transparent 25%),
+        linear-gradient(315deg, #2d2d44 25%, #252540 25%);
+    background-size: 26px 26px;
+    background-position: 0 0, 13px 0, 13px -13px, 0px 13px;
+    border: 1px solid #3d3d5c;
+}
+#grid.scene-street .wall{
+    background:
+        repeating-linear-gradient(0deg, #5c4033 0px, #5c4033 8px, #4a3429 8px, #4a3429 16px),
+        repeating-linear-gradient(90deg, transparent 0px, transparent 24px, #3d2817 24px, #3d2817 26px);
+    border: 2px solid #2a1a0a;
+}
+
+/* === ESCENARIO BANCO/BÓVEDA (Nivel 3-4) === */
+#grid.scene-bank{
+    background:
+        linear-gradient(180deg, #1a1a1a 0%, #2a2a2a 50%, #1f1f1f 100%);
+    border-color: #c9a227;
+    box-shadow: inset 0 0 20px rgba(201,162,39,0.3);
+}
+#grid.scene-bank .cell{
+    background:
+        linear-gradient(90deg, #2f2f2f 50%, #262626 50%);
+    background-size: 13px 13px;
+    border: 1px solid #444;
+    box-shadow: inset 0 0 3px rgba(201,162,39,0.2);
+}
+#grid.scene-bank .wall{
+    background:
+        repeating-linear-gradient(90deg, #c9a227 0px, #c9a227 4px, #a8891f 4px, #a8891f 8px);
+    border: 2px solid #8b7419;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.5);
+}
+
+/* === ESCENARIO INFIERNO (Nivel 5 - Boss) === */
+#grid.scene-hell{
+    background:
+        linear-gradient(180deg, #1a0000 0%, #330000 30%, #1a0000 70%, #0d0000 100%);
+    border-color: #ff3300;
+    box-shadow: 0 0 30px rgba(255,50,0,0.5), inset 0 0 30px rgba(255,0,0,0.3);
+    animation: hell-glow 2s ease-in-out infinite;
+}
+@keyframes hell-glow {
+    0%, 100% { box-shadow: 0 0 30px rgba(255,50,0,0.5), inset 0 0 30px rgba(255,0,0,0.3); }
+    50% { box-shadow: 0 0 50px rgba(255,80,0,0.7), inset 0 0 40px rgba(255,30,0,0.5); }
+}
+#grid.scene-hell .cell{
+    background:
+        radial-gradient(circle at 50% 100%, #4a1a00 0%, #2a0a00 50%, #1a0000 100%);
+    border: 1px solid #661a00;
+    animation: lava-flicker 3s ease-in-out infinite;
+}
+@keyframes lava-flicker {
+    0%, 100% { background: radial-gradient(circle at 50% 100%, #4a1a00 0%, #2a0a00 50%, #1a0000 100%); }
+    33% { background: radial-gradient(circle at 30% 80%, #5a2000 0%, #3a1000 50%, #1a0000 100%); }
+    66% { background: radial-gradient(circle at 70% 90%, #4a1500 0%, #2a0800 50%, #1a0000 100%); }
+}
+#grid.scene-hell .wall{
+    background:
+        linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 50%, #1a1a1a 100%),
+        repeating-linear-gradient(90deg, #333 0px, #333 4px, #222 4px, #222 8px);
+    border: 2px solid #ff3300;
+    box-shadow: 0 0 10px rgba(255,50,0,0.8);
+}
+
 .cell{width:52px;height:52px;background:#000;border:1px solid #2a5a2a;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
-.cell img{width:95%; height:95%; object-fit:contain; z-index:2;}
+.cell img{width:95%; height:95%; object-fit:contain; z-index:2; mix-blend-mode:screen;}
 .cell img.diabla-sprite{width:80%; height:80%;}
 .wall{background:#444;border-color:#222;cursor:default;}
 .move{background:#2d6cdf !important; opacity:0.8;}
@@ -407,7 +483,7 @@ const SIZE = 8;
 const MAX_LEVEL = 5;
 
 // Sistema de niveles
-let currentLevel = 5; // TEMP: Cambiar a 1 para juego normal
+let currentLevel = 1;
 const levelConfig = {
     1: { enemies: 4, baseDmgMin: 451400, baseDmgMax: 633000, reward: 500000, enemyHp: 800000, enemyResist: 0.10 },
     2: { enemies: 5, baseDmgMin: 550000, baseDmgMax: 750000, reward: 750000, enemyHp: 1200000, enemyResist: 0.15 },
@@ -466,6 +542,7 @@ function init(isNewLevel = false) {
     activeEffects = [];
     turnCounter = 0;
     jovenAloneMessageShown = false;
+    diablaComboTracker = {};
 
     // Posicionar jugadores y resetear PA/PM y limpiar buffs/debuffs
     players.forEach(p => {
@@ -677,10 +754,10 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
         attacker.hp = Math.min(attacker.maxHp, attacker.hp + stolen);
         log(`${attacker.name} robó ${fmt(stolen)} (50%) y aumentó su saldo.`, 'log-heal');
 
-        // Diabla reduce el daño del objetivo 2-3% por 3 turnos (acumulable)
-        const debuffAmount = 0.02 + Math.random() * 0.01; // 2-3%
-        addEffect(target, 'dmgReduction', debuffAmount, 3);
-        log(`👿 ${target.name} tiene -${Math.round(debuffAmount*100)}% daño por 3 turnos!`, 'log-dmg');
+        // Diabla reduce el daño del objetivo 2-10% por 4 turnos (acumulable)
+        const debuffAmount = 0.02 + Math.random() * 0.08; // 2-10%
+        addEffect(target, 'dmgReduction', debuffAmount, 4);
+        log(`👿 ${target.name} tiene -${Math.round(debuffAmount*100)}% daño por 4 turnos!`, 'log-dmg');
     }
 
     log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}${isCrit ? ' 💥' : ''}`, 'log-dmg');
@@ -786,6 +863,17 @@ function notifyComboProgress(targetId) {
 function draw() {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
+
+    // Aplicar escenario según nivel
+    grid.classList.remove('scene-street', 'scene-bank', 'scene-hell');
+    if(currentLevel <= 2) {
+        grid.classList.add('scene-street');
+    } else if(currentLevel <= 4) {
+        grid.classList.add('scene-bank');
+    } else {
+        grid.classList.add('scene-hell');
+    }
+
     const p = players[activeIdx];
     let reachMap = isMoving ? calculateReach(p.x, p.y, p.pm) : new Map();
 
@@ -1383,6 +1471,98 @@ document.getElementById('endTurnBtn').onclick = () => { if(!enemyTurnActive) sta
 let turnCounter = 0;
 let jovenAloneMessageShown = false; // Para no repetir el mensaje de doom
 
+// Sistema de combos de La Diabla
+let diablaComboTracker = {}; // {targetId: [ataque1, ataque2, ...]}
+
+// Registrar ataque de Diabla para combo
+function trackDiablaAttack(targetId, attackName) {
+    if(!diablaComboTracker[targetId]) diablaComboTracker[targetId] = [];
+    diablaComboTracker[targetId].push(attackName);
+
+    // Máximo 5 ataques en memoria
+    if(diablaComboTracker[targetId].length > 5) {
+        diablaComboTracker[targetId].shift();
+    }
+}
+
+// Verificar y ejecutar combo de Diabla
+function checkDiablaCombo(targetId, diabla) {
+    const hits = diablaComboTracker[targetId];
+    if(!hits || hits.length < 3) return false;
+
+    const last3 = hits.slice(-3);
+    const target = players.find(p => p.id === targetId);
+    if(!target || target.hp <= 0) return false;
+
+    // COMBO 1: Placaje + Puño + Puño = "Demolición" (600K daño puro)
+    if(last3[0] === 'Placaje' && last3[1] === 'Puño' && last3[2] === 'Puño') {
+        log(``, '');
+        log(`👿🔥💀 ¡¡COMBO DIABÓLICO: DEMOLICIÓN!! 💀🔥👿`, 'log-dmg');
+        log(`Placaje → Puño → Puño = ¡DEVASTACIÓN!`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        const comboDmg = 600000; // 600K daño puro
+        target.hp -= comboDmg; // Ignora resistencias
+        log(`${target.name} recibe ${fmt(comboDmg)} de DAÑO PURO (ignora resistencias)!`, 'log-dmg');
+
+        diablaComboTracker[targetId] = []; // Reset combo
+        return true;
+    }
+
+    // COMBO 2: Empujón + Empujón + Puño = "Acorralamiento" (450K daño puro + quita 2 PA)
+    if(last3[0] === 'Empujón' && last3[1] === 'Empujón' && last3[2] === 'Puño') {
+        log(``, '');
+        log(`👿💢⚡ ¡¡COMBO DIABÓLICO: ACORRALAMIENTO!! ⚡💢👿`, 'log-dmg');
+        log(`Empujón → Empujón → Puño = ¡SIN ESCAPE!`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        const comboDmg = 450000; // 450K daño puro
+        target.hp -= comboDmg;
+        target.pa = Math.max(0, (target.pa || 6) - 2); // Quita 2 PA
+        log(`${target.name} recibe ${fmt(comboDmg)} de DAÑO PURO y pierde 2 PA!`, 'log-dmg');
+
+        diablaComboTracker[targetId] = [];
+        return true;
+    }
+
+    // COMBO 3: Lanzamiento + Puño + Puño = "Castigo Infernal" (500K daño puro + reduce resistencia)
+    if(last3[0] === 'Lanzamiento' && last3[1] === 'Puño' && last3[2] === 'Puño') {
+        log(``, '');
+        log(`👿🔥😈 ¡¡COMBO DIABÓLICO: CASTIGO INFERNAL!! 😈🔥👿`, 'log-dmg');
+        log(`Lanzamiento → Puño → Puño = ¡DESTRUCCIÓN!`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        const comboDmg = 500000; // 500K daño puro
+        target.hp -= comboDmg;
+        // Reducir resistencia permanentemente (si tiene)
+        if(target.resistance) {
+            target.resistance = Math.max(0, target.resistance - 0.10);
+            log(`${target.name} pierde 10% de resistencia permanentemente!`, 'log-dmg');
+        }
+        log(`${target.name} recibe ${fmt(comboDmg)} de DAÑO PURO!`, 'log-dmg');
+
+        diablaComboTracker[targetId] = [];
+        return true;
+    }
+
+    // COMBO 4: Ira + Puño + Puño = "Furia Demoníaca" (750K daño puro - el más fuerte)
+    if(last3[0] === 'Ira' && last3[1] === 'Puño' && last3[2] === 'Puño') {
+        log(``, '');
+        log(`👿💀🔥 ¡¡COMBO DIABÓLICO: FURIA DEMONÍACA!! 🔥💀👿`, 'log-dmg');
+        log(`Ira → Puño → Puño = ¡ANIQUILACIÓN TOTAL!`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        const comboDmg = 750000; // 750K daño puro
+        target.hp -= comboDmg;
+        log(`${target.name} recibe ${fmt(comboDmg)} de DAÑO PURO (ignora resistencias)!`, 'log-dmg');
+
+        diablaComboTracker[targetId] = [];
+        return true;
+    }
+
+    return false;
+}
+
 // ===== IA DE LA DIABLA (BOSS FINAL) =====
 function actDiabla(diabla) {
     const alivePlayers = players.filter(pl => pl.hp > 0);
@@ -1667,6 +1847,10 @@ function actDiabla(diabla) {
                 // Daño por caída (más distancia = más daño)
                 const fallDmg = 200000 * bestThrow.dist;
                 applyDamage(carryTarget, fallDmg, "Lanzamiento infernal", diabla);
+
+                // Trackear para combo
+                trackDiablaAttack(carryTarget.id, 'Lanzamiento');
+                checkDiablaCombo(carryTarget.id, diabla);
             }
             diabla.carried = null;
             paUsed += 2;
@@ -1683,6 +1867,11 @@ function actDiabla(diabla) {
         applyDamage(jovenAdjacent, placajeDmg, "Placaje infernal", diabla);
         jovenAdjacent.pmPenalty = (jovenAdjacent.pmPenalty || 0) + 2;
         log(`👿 ¡PLACAJE! ${jovenAdjacent.name} pierde 2 PM!`, 'log-dmg');
+
+        // Trackear para combo
+        trackDiablaAttack(jovenAdjacent.id, 'Placaje');
+        checkDiablaCombo(jovenAdjacent.id, diabla);
+
         paUsed += 2;
     }
 
@@ -1719,6 +1908,11 @@ function actDiabla(diabla) {
             pushTarget.y += dy * pushed;
             log(`👿 La Diabla empuja a ${pushTarget.name} ${pushed} casillas!`, 'log-dmg');
         }
+
+        // Trackear para combo (empujón cuenta aunque no haya movido)
+        trackDiablaAttack(pushTarget.id, 'Empujón');
+        checkDiablaCombo(pushTarget.id, diabla);
+
         paUsed += 2;
 
         // Actualizar lista de adyacentes
@@ -1754,6 +1948,11 @@ function actDiabla(diabla) {
         }
 
         applyDamage(punchTarget, baseDmg, "Puño Demoníaco", diabla);
+
+        // Trackear para combo
+        trackDiablaAttack(punchTarget.id, 'Puño');
+        checkDiablaCombo(punchTarget.id, diabla);
+
         paUsed += 3;
     }
 
@@ -1791,8 +1990,15 @@ function diablaIraAttack(diabla) {
             const target = players.find(pl => pl.x === nx && pl.y === ny && pl.hp > 0);
             if(target) {
                 applyDamage(target, iraDmg, "Ira de la Diabla", diabla);
+                // Trackear para combo
+                trackDiablaAttack(target.id, 'Ira');
             }
         }
+    });
+
+    // Verificar combos de todos los jugadores afectados por Ira
+    players.filter(pl => pl.hp > 0).forEach(pl => {
+        checkDiablaCombo(pl.id, diabla);
     });
 
     // Efecto visual: marcar casillas con fuego (parpadeo notable)
