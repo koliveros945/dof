@@ -24,10 +24,12 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
 #enemy-panels{display:flex;gap:8px;padding:8px;justify-content:center;width:100%;flex-wrap:wrap;}
 .enemy-card{background:#111;border:2px solid #e74c3c;border-radius:8px;padding:6px 10px;min-width:130px;text-align:center;font-size:10px;transition:all 0.3s;}
 .enemy-card.highlighted{border-color:#f39c12;box-shadow:0 0 15px rgba(243,156,18,0.8);transform:scale(1.05);}
+.enemy-card.boss-card{border-color:#8e44ad;background:linear-gradient(180deg,#1a0a1a 0%,#2d1f3d 100%);min-width:180px;box-shadow:0 0 10px rgba(142,68,173,0.5);}
 .cell.enemy-highlighted{box-shadow:inset 0 0 20px rgba(243,156,18,0.9);border:2px solid #f39c12 !important;}
 #grid{display:grid;grid-template-columns:repeat(8,52px);grid-template-rows:repeat(8,52px);gap:4px;border:3px solid #333;padding:4px;background:#111;border-radius:8px;}
 .cell{width:52px;height:52px;background:#000;border:1px solid #2a5a2a;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
 .cell img{width:95%; height:95%; object-fit:contain; z-index:2;}
+.cell img.diabla-sprite{width:80%; height:80%;}
 .wall{background:#444;border-color:#222;cursor:default;}
 .move{background:#2d6cdf !important; opacity:0.8;}
 .spell{background:#f39c12 !important; opacity:0.8;}
@@ -103,6 +105,57 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
     }
 }
 .cell.uva-evolved { animation: uva-evolved 0.6s ease-in-out infinite; border: 2px solid #f1c40f !important; }
+
+/* Efecto Diabla - púrpura demoníaco */
+@keyframes diabla-pulse {
+    0%, 100% {
+        box-shadow: inset 0 0 15px rgba(142,68,173,0.8), 0 0 12px rgba(155,89,182,0.7), 0 0 25px rgba(142,68,173,0.4);
+        filter: brightness(1.1);
+    }
+    50% {
+        box-shadow: inset 0 0 25px rgba(192,57,43,1), 0 0 20px rgba(231,76,60,0.9), 0 0 35px rgba(192,57,43,0.6);
+        filter: brightness(1.3);
+    }
+}
+.cell.diabla-fury { animation: diabla-pulse 0.4s ease-in-out infinite; border: 2px solid #8e44ad !important; }
+
+/* Efecto Fueguito - naranja parpadeante */
+@keyframes fueguito-pulse {
+    0%, 100% {
+        box-shadow: inset 0 0 10px rgba(230,126,34,0.9), 0 0 8px rgba(211,84,0,0.7);
+        filter: brightness(1.2);
+    }
+    50% {
+        box-shadow: inset 0 0 18px rgba(241,196,15,1), 0 0 15px rgba(243,156,18,0.9);
+        filter: brightness(1.4);
+    }
+}
+.cell.fueguito { animation: fueguito-pulse 0.3s ease-in-out infinite; border: 2px solid #e67e22 !important; }
+
+/* Efecto de fuego en casillas (ataque de ira) */
+@keyframes fire-cell {
+    0%, 100% {
+        background: rgba(231,76,60,0.9);
+        box-shadow: inset 0 0 20px rgba(255,100,0,0.8), 0 0 15px rgba(255,69,0,0.6);
+    }
+    25% {
+        background: rgba(255,165,0,0.95);
+        box-shadow: inset 0 0 30px rgba(255,200,0,1), 0 0 25px rgba(255,140,0,0.8);
+    }
+    50% {
+        background: rgba(255,69,0,0.9);
+        box-shadow: inset 0 0 25px rgba(255,50,0,0.9), 0 0 20px rgba(255,0,0,0.7);
+    }
+    75% {
+        background: rgba(255,140,0,0.95);
+        box-shadow: inset 0 0 30px rgba(255,180,0,1), 0 0 25px rgba(255,120,0,0.8);
+    }
+}
+.cell.on-fire {
+    animation: fire-cell 0.15s ease-in-out infinite;
+    border: 2px solid #ff4500 !important;
+    z-index: 10;
+}
 
 /* === PANELES LATERALES === */
 #game-area {
@@ -190,7 +243,7 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
   <div id="portraits"></div>
   <div id="hp-panels"></div>
   <div id="stats">
-    <div id="level-indicator" style="color:#f39c12; margin-bottom:4px;">NIVEL 1/4</div>
+    <div id="level-indicator" style="color:#f39c12; margin-bottom:4px;">NIVEL 1/5</div>
     PA: <span id="pa">6</span> | PM: <span id="pm">3</span>
   </div>
 </div>
@@ -236,7 +289,7 @@ body{margin:0;background:#1b1b1b;color:#eee;font-family:monospace;display:flex;f
             <div class="combo-item">
                 <div class="combo-name">🔗 ATRACO EN CADENA</div>
                 <div class="combo-seq">Diagonal → Diagonal → ...</div>
-                <div class="combo-bonus">x2 daño por cada enemigo en diagonal (3+ = combo)</div>
+                <div class="combo-bonus">Golpea todos los enemigos en diagonal + intercambia pos.</div>
             </div>
         </div>
         <div class="panel-title" style="margin-top:10px;">💡 TIPS</div>
@@ -351,16 +404,20 @@ const spellSFX = {
 // ===== CONFIGURACIÓN $COP =====
 const fmt = (n) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n);
 const SIZE = 8;
-const MAX_LEVEL = 4;
+const MAX_LEVEL = 5;
 
 // Sistema de niveles
-let currentLevel = 1;
+let currentLevel = 5; // TEMP: Cambiar a 1 para juego normal
 const levelConfig = {
     1: { enemies: 4, baseDmgMin: 451400, baseDmgMax: 633000, reward: 500000, enemyHp: 800000, enemyResist: 0.10 },
     2: { enemies: 5, baseDmgMin: 550000, baseDmgMax: 750000, reward: 750000, enemyHp: 1200000, enemyResist: 0.15 },
     3: { enemies: 6, baseDmgMin: 650000, baseDmgMax: 900000, reward: 1000000, enemyHp: 1800000, enemyResist: 0.20 },
-    4: { enemies: 8, baseDmgMin: 800000, baseDmgMax: 1100000, reward: 1500000, enemyHp: 2500000, enemyResist: 0.25 }
+    4: { enemies: 8, baseDmgMin: 800000, baseDmgMax: 1100000, reward: 1500000, enemyHp: 2500000, enemyResist: 0.25 },
+    5: { enemies: 1, baseDmgMin: 900000, baseDmgMax: 1300000, reward: 0, enemyHp: 12000000, enemyResist: 0.30, isBoss: true }
 };
+
+// Fueguitos invocados por la Diabla
+let fueguitos = [];
 
 // HP base de los jugadores (todos iguales)
 const baseHP = {
@@ -407,6 +464,8 @@ function init(isNewLevel = false) {
     isMoving = false;
     activeIdx = 0;
     activeEffects = [];
+    turnCounter = 0;
+    jovenAloneMessageShown = false;
 
     // Posicionar jugadores y resetear PA/PM y limpiar buffs/debuffs
     players.forEach(p => {
@@ -428,25 +487,51 @@ function init(isNewLevel = false) {
 
     // Crear enemigos según el nivel
     const config = levelConfig[currentLevel];
-    for(let i=0; i < config.enemies; i++) {
+    fueguitos = []; // Limpiar fueguitos
+
+    if(config.isBoss) {
+        // NIVEL 5: BOSS - LA DIABLA
         const pos = getEmptyPos();
         enemies.push({
-            id:'D'+i,
-            name:'Escote '+(i+1),
-            x:pos.x,
-            y:pos.y,
+            id: 'DIABLA',
+            name: '👿 La Diabla',
+            x: pos.x,
+            y: pos.y,
             hp: config.enemyHp,
-            maxHp: config.enemyHp * 5, // Pueden crecer hasta 5x robando
-            pa:3,
-            pm:2,
-            resistance: config.enemyResist // Resistencia al daño
+            maxHp: config.enemyHp,
+            pa: 9,
+            pm: 3,
+            resistance: config.enemyResist,
+            isBoss: true,
+            lastIraUsed: -2, // Cooldown ataque de ira (cada 2 turnos)
+            lastSueltameUsed: -3, // Cooldown "Sueltame!" (cada 3 turnos)
+            lastGritoUsed: -4 // Cooldown "Grito" (cada 4 turnos)
         });
+        log(`═══ NIVEL ${currentLevel}/${MAX_LEVEL} - BOSS FINAL ═══`, 'log-dmg');
+        log(`👿 ¡LA DIABLA HA APARECIDO!`, 'log-dmg');
+        log(`HP: ${fmt(config.enemyHp)} | Resistencia: ${Math.round(config.enemyResist*100)}%`);
+        log(`¡CUIDADO! Tiene 9 PA, ataque de ira e invoca fueguitos!`, 'log-dmg');
+    } else {
+        // Niveles normales: Escotes
+        for(let i=0; i < config.enemies; i++) {
+            const pos = getEmptyPos();
+            enemies.push({
+                id:'D'+i,
+                name:'Escote '+(i+1),
+                x:pos.x,
+                y:pos.y,
+                hp: config.enemyHp,
+                maxHp: config.enemyHp * 5, // Pueden crecer hasta 5x robando
+                pa:3,
+                pm:2,
+                resistance: config.enemyResist // Resistencia al daño
+            });
+        }
+        log(`═══ NIVEL ${currentLevel}/${MAX_LEVEL} ═══`, 'log-heal');
+        log(`Escotes: ${config.enemies} | HP: ${fmt(config.enemyHp)} | Resistencia: ${Math.round(config.enemyResist*100)}%`);
+        log(`Daño enemigo: ${fmt(config.baseDmgMin)}-${fmt(config.baseDmgMax)}`);
+        log("¡Los Escotes roban capital al atacar! Protege a El Joven.");
     }
-
-    log(`═══ NIVEL ${currentLevel}/${MAX_LEVEL} ═══`, 'log-heal');
-    log(`Escotes: ${config.enemies} | HP: ${fmt(config.enemyHp)} | Resistencia: ${Math.round(config.enemyResist*100)}%`);
-    log(`Daño enemigo: ${fmt(config.baseDmgMin)}-${fmt(config.baseDmgMax)}`);
-    log("¡Los Escotes roban capital al atacar! Protege a El Joven.");
     draw();
 }
 
@@ -457,12 +542,20 @@ function getEmptyPos() {
     return {x, y};
 }
 
+// Helper para identificar si una entidad es enemigo
+function isEnemyEntity(ent) {
+    if(!ent || !ent.id) return false;
+    return ent.id.startsWith('D') || ent.id === 'DIABLA' || ent.id.startsWith('FUEGO');
+}
+
 function getEntityAt(x,y) {
     const p = players.find(pl => pl.x===x && pl.y===y && pl.hp > 0);
     if(p) return p;
     const e = enemies.find(en => en.x===x && en.y===y && en.hp > 0);
     if(e) return e;
     if(uva && uva.x===x && uva.y===y && uva.hp > 0) return uva;
+    const f = fueguitos.find(fg => fg.x===x && fg.y===y);
+    if(f) return f;
     return null;
 }
 
@@ -552,6 +645,13 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
         log(`${attacker.name} tiene +${Math.round(attacker.dmgBoost*100)}% daño (+${fmt(bonus)})`, 'log-heal');
     }
 
+    // Debuff de daño del atacante (acumulado por ataques de Diabla)
+    if(attacker.dmgReduction) {
+        const reduction = finalDmg * attacker.dmgReduction;
+        finalDmg -= reduction;
+        log(`👿 ${attacker.name} tiene -${Math.round(attacker.dmgReduction*100)}% daño (-${fmt(reduction)})`, 'log-dmg');
+    }
+
     // Vulnerabilidad del objetivo (Insulto acumulable)
     if(target.vulnerability) {
         const extra = finalDmg * target.vulnerability;
@@ -568,10 +668,19 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
 
     target.hp -= finalDmg;
 
-    // REGLA: Escotes roban lo que quitan
-    if(attacker.id.includes('D')) {
-        attacker.hp += finalDmg;
+    // REGLA: Escotes roban todo, Diabla roba la mitad
+    if(attacker.id.startsWith('D') && attacker.id !== 'DIABLA') {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + finalDmg);
         log(`${attacker.name} robó ${fmt(finalDmg)} y aumentó su saldo.`, 'log-heal');
+    } else if(attacker.id === 'DIABLA') {
+        const stolen = finalDmg * 0.5;
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + stolen);
+        log(`${attacker.name} robó ${fmt(stolen)} (50%) y aumentó su saldo.`, 'log-heal');
+
+        // Diabla reduce el daño del objetivo 2-3% por 3 turnos (acumulable)
+        const debuffAmount = 0.02 + Math.random() * 0.01; // 2-3%
+        addEffect(target, 'dmgReduction', debuffAmount, 3);
+        log(`👿 ${target.name} tiene -${Math.round(debuffAmount*100)}% daño por 3 turnos!`, 'log-dmg');
     }
 
     log(`${attacker.name} usa "${spellName}". ${target.name} pierde ${fmt(finalDmg)}${isCrit ? ' 💥' : ''}`, 'log-dmg');
@@ -591,7 +700,7 @@ function applyDamage(target, amount, spellName, attacker, ignoreResistance = fal
     if(target.hp <= 0) {
         target.hp = 0;
         if(target.id === 'K') endGame("QUIEBRA DEL JOVEN", "El saldo de El Joven es $0. Has perdido.", false);
-        else if(target.id.includes('D')) {
+        else if(isEnemyEntity(target)) {
             log(`${target.name} fue liquidado.`);
             enemies = enemies.filter(e => e.hp > 0);
             if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
@@ -626,7 +735,7 @@ function checkAndApplyCombo(target) {
         // Verificar si murió
         if(target.hp <= 0) {
             target.hp = 0;
-            if(target.id.includes('D')) {
+            if(isEnemyEntity(target)) {
                 log(`${target.name} fue ANIQUILADO por el combo!`);
                 enemies = enemies.filter(e => e.hp > 0);
                 if(enemies.length === 0) endGame("¡VICTORIA!", "Escotes eliminados. Capital a salvo.", true);
@@ -693,7 +802,9 @@ function draw() {
                 if(ent.id === 'J') img.src = 'aleman.png';
                 else if(ent.id === 'H') img.src = 'h.png';
                 else if(ent.id === 'K') img.src = 'joven.png';
-                else if(ent.id.includes('D')) img.src = 'escote.png';
+                else if(ent.id === 'DIABLA') { img.src = 'diabla.png'; img.classList.add('diabla-sprite'); }
+                else if(ent.id && ent.id.startsWith('FUEGO')) img.src = 'fuego.png';
+                else if(ent.id && ent.id.includes('D')) img.src = 'escote.png';
                 else if(ent.id === 'U') img.src = 'uva.png';
                 cell.appendChild(img);
                 // Resaltar enemigo seleccionado en el tablero
@@ -717,6 +828,14 @@ function draw() {
                 const joven = players.find(pl => pl.id === 'K');
                 if(ent.id === 'U' && uva && joven && joven.hp / joven.maxHp < 0.30) {
                     cell.classList.add('uva-evolved');
+                }
+                // Efecto de furia de la Diabla (< 30% vida)
+                if(ent.id === 'DIABLA' && ent.hp / ent.maxHp < 0.30) {
+                    cell.classList.add('diabla-fury');
+                }
+                // Efecto fueguito
+                if(ent.id && ent.id.startsWith('FUEGO')) {
+                    cell.classList.add('fueguito');
                 }
             }
             if(isMoving && reachMap.has(`${x},${y}`)) cell.classList.add('move');
@@ -819,15 +938,26 @@ function updateUI() {
     ePanel.innerHTML = '';
     enemies.forEach(e => {
         const div = document.createElement('div');
-        div.className = `enemy-card${highlightedEnemy === e.id ? ' highlighted' : ''}`;
+        const isBoss = e.isBoss;
+        div.className = `enemy-card${highlightedEnemy === e.id ? ' highlighted' : ''}${isBoss ? ' boss-card' : ''}`;
         // Mostrar buffs/debuffs
         let buffs = '';
         if(e.dmgBoost) buffs += `<span style="color:#4dff4d;">+${Math.round(e.dmgBoost*100)}%DMG</span> `;
         if(e.resistance) buffs += `<span style="color:#3498db;">${Math.round(e.resistance*100)}%RES</span> `;
         if(e.vulnerability) buffs += `<span style="color:#ff6b6b;">-${Math.round(e.vulnerability*100)}%DEF</span> `;
+
+        // Barra de HP para boss
+        const hpPercent = Math.max(0, (e.hp / e.maxHp) * 100);
+        const hpBar = isBoss ? `
+            <div style="width:100%;height:8px;background:#333;border-radius:4px;margin:4px 0;overflow:hidden;">
+                <div style="width:${hpPercent}%;height:100%;background:linear-gradient(90deg,#8e44ad,#9b59b6);transition:width 0.3s;"></div>
+            </div>
+        ` : '';
+
         div.innerHTML = `
-            <b>${e.name}</b><br>
-            <span style="color:#f39c12;">${fmt(e.hp)}</span><br>
+            <b style="${isBoss ? 'color:#9b59b6;font-size:12px;' : ''}">${e.name}</b><br>
+            ${hpBar}
+            <span style="color:${isBoss ? '#9b59b6' : '#f39c12'};">${fmt(e.hp)}</span><br>
             <span style="font-size:9px; color:#aaa;">PA:${e.pa} PM:${e.pm}</span><br>
             <span style="font-size:8px;">${buffs || '<span style="color:#666;">-</span>'}</span>
         `;
@@ -839,6 +969,19 @@ function updateUI() {
         div.style.cursor = 'pointer';
         ePanel.appendChild(div);
     });
+
+    // Mostrar fueguitos si hay
+    if(fueguitos.length > 0) {
+        const fuegoDiv = document.createElement('div');
+        fuegoDiv.className = 'enemy-card';
+        fuegoDiv.style.borderColor = '#e67e22';
+        fuegoDiv.innerHTML = `
+            <b style="color:#e67e22;">🔥 Fueguitos</b><br>
+            <span style="color:#f39c12;">${fueguitos.length} activos</span><br>
+            <span style="font-size:9px; color:#ff6b6b;">¡Explotan al inicio del turno enemigo!</span>
+        `;
+        ePanel.appendChild(fuegoDiv);
+    }
 }
 
 function resetActions() { isMoving = false; selectedSpell = null; }
@@ -1036,14 +1179,13 @@ function executeSpell(x,y) {
             }
 
             chain.forEach((enemy, idx) => {
-                const multiplier = Math.pow(2, idx); // 1x, 2x, 4x, 8x...
-                const dmg = baseDmg * multiplier;
+                const dmg = baseDmg; // Mismo daño para todos
 
                 if(idx > 0) {
-                    log(`🔗 Cadena ${idx + 1}: x${multiplier} daño!`, 'log-heal');
+                    log(`🔗 Cadena ${idx + 1}!`, 'log-heal');
                 }
 
-                applyDamage(enemy, dmg, idx === 0 ? selectedSpell : `Atraco (cadena x${multiplier})`, p);
+                applyDamage(enemy, dmg, idx === 0 ? selectedSpell : `Atraco (cadena)`, p);
                 totalRecovered += dmg * 0.50;
 
                 // Intercambiar posición con cada objetivo (uno por uno)
@@ -1237,15 +1379,554 @@ function executeSpell(x,y) {
 // ===== TURNO ESCOTES + UVA =====
 document.getElementById('endTurnBtn').onclick = () => { if(!enemyTurnActive) startEnemyTurn(); };
 
+// Contador global de turnos para el boss
+let turnCounter = 0;
+let jovenAloneMessageShown = false; // Para no repetir el mensaje de doom
+
+// ===== IA DE LA DIABLA (BOSS FINAL) =====
+function actDiabla(diabla) {
+    const alivePlayers = players.filter(pl => pl.hp > 0);
+    if(alivePlayers.length === 0) return;
+
+    const config = levelConfig[currentLevel];
+    const joven = alivePlayers.find(pl => pl.id === 'K');
+    const aleman = alivePlayers.find(pl => pl.id === 'A');
+    const h = alivePlayers.find(pl => pl.id === 'H');
+
+    // ESTRATEGIA: Priorizar eliminar al Alemán primero (contrarrestar su daño acumulado)
+    // Luego H, y finalmente el Joven (dejarlo indefenso)
+    let target;
+    if(aleman) {
+        target = aleman; // Prioridad 1: Alemán (sus golpes acumulados son peligrosos)
+    } else if(h) {
+        target = h; // Prioridad 2: H (el protector)
+    } else {
+        target = joven; // Prioridad 3: El Joven (el objetivo final)
+    }
+
+    // Verificar si el Joven quedó solo (H y Alemán muertos) - solo mostrar una vez
+    if(joven && !aleman && !h && !jovenAloneMessageShown) {
+        const aliveAllies = alivePlayers.filter(pl => pl.id !== 'K');
+        if(aliveAllies.length === 0) {
+            log(``, '');
+            log(`😈💀 "La Diabla quedó a solas con el joven..." 💀😈`, 'log-dmg');
+            log(`😱 "Ya valió..." 😱`, 'log-dmg');
+            log(``, '');
+            jovenAloneMessageShown = true;
+        }
+    }
+
+    // Estado de furia: < 30% HP
+    const isFury = diabla.hp / diabla.maxHp < 0.30;
+    if(isFury) {
+        log(`🔥👿 ¡LA DIABLA ESTÁ FURIOSA! 🔥`, 'log-dmg');
+    }
+
+    let paUsed = 0;
+    const maxPA = diabla.pa; // 9 PA
+
+    // === FASE 1: MOVIMIENTO TÁCTICO (arrinconar al Joven) ===
+    // Función para evaluar qué tan "arrinconado" está un jugador en una posición
+    function getCornerScore(px, py) {
+        let score = 0;
+        // Más cerca de las esquinas/bordes = mejor
+        score += Math.min(px, SIZE - 1 - px) <= 1 ? 2 : 0;
+        score += Math.min(py, SIZE - 1 - py) <= 1 ? 2 : 0;
+        // Contar muros/bordes adyacentes
+        const dirs = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+        dirs.forEach(d => {
+            const nx = px + d.dx, ny = py + d.dy;
+            if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE || map[ny][nx] === 1) {
+                score += 1;
+            }
+        });
+        return score;
+    }
+
+    for(let i = 0; i < diabla.pm; i++) {
+        const currentDist = Math.abs(diabla.x - target.x) + Math.abs(diabla.y - target.y);
+        if(currentDist <= 1) break;
+
+        let reach = calculateReach(diabla.x, diabla.y, 1);
+        let best = null;
+        let bestScore = -999;
+
+        for(let key of reach.keys()) {
+            let [nx, ny] = key.split(',').map(Number);
+            let dist = Math.abs(nx - target.x) + Math.abs(ny - target.y);
+
+            // Calcular score: priorizar posiciones que empujen al Joven hacia esquinas
+            // Dirección en que empujaríamos al Joven desde esta posición
+            const pushDirX = target.x - nx;
+            const pushDirY = target.y - ny;
+            const potentialPushX = target.x + Math.sign(pushDirX);
+            const potentialPushY = target.y + Math.sign(pushDirY);
+
+            let score = 0;
+            score -= dist * 2; // Acercarse sigue siendo importante
+
+            // Bonus si desde esta posición empujaríamos al Joven hacia una esquina/muro
+            if(dist === 1) {
+                const cornerScore = getCornerScore(potentialPushX, potentialPushY);
+                score += cornerScore * 3;
+
+                // Bonus extra si el empujón causaría colisión
+                if(potentialPushX < 0 || potentialPushX >= SIZE ||
+                   potentialPushY < 0 || potentialPushY >= SIZE ||
+                   map[potentialPushY]?.[potentialPushX] === 1 ||
+                   getEntityAt(potentialPushX, potentialPushY)) {
+                    score += 10; // ¡Colisión asegurada!
+                    log(`👿 La Diabla ve una oportunidad de colisión...`, 'log-dmg');
+                }
+            }
+
+            if(score > bestScore) {
+                best = {x: nx, y: ny};
+                bestScore = score;
+            }
+        }
+
+        if(best) {
+            diabla.x = best.x;
+            diabla.y = best.y;
+        }
+    }
+
+    // === FASE 2: ¡SUÉLTAME! (cada 3 turnos, empuja 3 casillas a TODOS los adyacentes, cuesta 3 PA) ===
+    const allAdjacent = alivePlayers.filter(pl =>
+        Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+    );
+    if(allAdjacent.length >= 2 && turnCounter - diabla.lastSueltameUsed >= 3 && paUsed + 3 <= maxPA) {
+        log(`👿💢 ¡¡SUÉLTAME!! 💢👿`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        allAdjacent.forEach(pl => {
+            const dx = Math.sign(pl.x - diabla.x);
+            const dy = Math.sign(pl.y - diabla.y);
+
+            // Empujar hasta 3 casillas
+            let finalX = pl.x;
+            let finalY = pl.y;
+            let pushed = 0;
+
+            for(let i = 1; i <= 3; i++) {
+                const nx = pl.x + dx * i;
+                const ny = pl.y + dy * i;
+
+                // Verificar límites del tablero
+                if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
+                   map[ny][nx] === 1 || getEntityAt(nx, ny)) {
+                    // Colisión
+                    const collisionDmg = 250000 + Math.random() * 150000;
+                    applyDamage(pl, collisionDmg, "¡Suéltame! (colisión)", diabla);
+                    break;
+                }
+                finalX = nx;
+                finalY = ny;
+                pushed++;
+            }
+
+            if(pushed > 0) {
+                pl.x = finalX;
+                pl.y = finalY;
+                log(`${pl.name} es lanzado ${pushed} casillas!`, 'log-dmg');
+            }
+        });
+
+        diabla.lastSueltameUsed = turnCounter;
+        paUsed += 3;
+    }
+
+    // === FASE 3: GRITO (cada 4 turnos, quita TODOS los buffs del objetivo, cuesta 2 PA) ===
+    const buffedPlayers = alivePlayers.filter(pl =>
+        pl.dmgBoost || pl.resistance
+    );
+    if(buffedPlayers.length > 0 && turnCounter - diabla.lastGritoUsed >= 4 && paUsed + 2 <= maxPA) {
+        // Priorizar a Kevin si tiene buffs
+        const gritoTarget = buffedPlayers.find(pl => pl.id === 'K') || buffedPlayers[0];
+
+        log(`👿😱 ¡¡GRITO INFERNAL!! 😱👿`, 'log-dmg');
+        AudioManager.playSFX('critico');
+
+        // Quitar todos los buffs
+        const hadDmgBoost = gritoTarget.dmgBoost;
+        const hadResistance = gritoTarget.resistance;
+        delete gritoTarget.dmgBoost;
+        delete gritoTarget.resistance;
+
+        let removedBuffs = [];
+        if(hadDmgBoost) removedBuffs.push(`+${Math.round(hadDmgBoost*100)}% daño`);
+        if(hadResistance) removedBuffs.push(`+${Math.round(hadResistance*100)}% resistencia`);
+
+        log(`${gritoTarget.name} pierde: ${removedBuffs.join(', ')}!`, 'log-dmg');
+
+        diabla.lastGritoUsed = turnCounter;
+        paUsed += 2;
+    }
+
+    // === FASE 4: ATAQUE DE IRA (cada 2 turnos, cuesta 4 PA) ===
+    if(turnCounter - diabla.lastIraUsed >= 2 && paUsed + 4 <= maxPA) {
+        diablaIraAttack(diabla);
+        diabla.lastIraUsed = turnCounter;
+        paUsed += 4;
+    }
+
+    // === FASE 5: INVOCAR FUEGUITO (cuesta 3 PA, máximo 3 fueguitos) ===
+    if(fueguitos.length < 3 && paUsed + 3 <= maxPA) {
+        diablaSpawnFueguito(diabla);
+        paUsed += 3;
+    }
+
+    // === FASE 6: CARGAR Y LANZAR (estratégico - buscar posiciones trampa) ===
+    // Función para evaluar qué tan "atrapada" estaría una entidad en una posición
+    function getTrapScore(px, py) {
+        let blockedDirs = 0;
+        const dirs = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+        dirs.forEach(d => {
+            const nx = px + d.dx, ny = py + d.dy;
+            // Contar direcciones bloqueadas (borde, muro, o entidad)
+            if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE ||
+               map[ny][nx] === 1 || getEntityAt(nx, ny)) {
+                blockedDirs++;
+            }
+        });
+        // 4 = completamente atrapado, 3 = muy atrapado, 2 = parcialmente, etc.
+        return blockedDirs;
+    }
+
+    // Priorizar cargar a H para dejarlo en posición trampa
+    const adjacentAllies = alivePlayers.filter(pl =>
+        pl.id !== 'K' &&
+        Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+    );
+
+    // Priorizar a H si está adyacente (para neutralizarlo en trampa)
+    const carryTarget = adjacentAllies.find(pl => pl.id === 'H') || adjacentAllies[0];
+
+    if(carryTarget && paUsed + 4 <= maxPA) { // 2 PA cargar + 2 PA lanzar
+        // Cargar al personaje
+        log(`👿 La Diabla CARGA a ${carryTarget.name}!`, 'log-dmg');
+        diabla.carried = carryTarget;
+        carryTarget.x = diabla.x;
+        carryTarget.y = diabla.y;
+        paUsed += 2;
+
+        // Lanzar estratégicamente - buscar la MEJOR posición trampa
+        if(paUsed + 2 <= maxPA) {
+            const throwDirs = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0},
+                              {dx:1,dy:1},{dx:1,dy:-1},{dx:-1,dy:1},{dx:-1,dy:-1}]; // Incluir diagonales
+            let bestThrow = null;
+            let bestThrowScore = -999;
+
+            // Buscar en TODO el rango posible de lanzamiento (hasta 4 casillas)
+            for(const dir of throwDirs) {
+                for(let dist = 4; dist >= 1; dist--) {
+                    const landX = diabla.x + dir.dx * dist;
+                    const landY = diabla.y + dir.dy * dist;
+
+                    if(landX >= 0 && landX < SIZE && landY >= 0 && landY < SIZE &&
+                       map[landY][landX] === 0 && !getEntityAt(landX, landY)) {
+
+                        // Evaluar qué tan buena es esta posición
+                        const trapScore = getTrapScore(landX, landY); // 0-4, más alto = más atrapado
+                        const distToJoven = joven ? Math.abs(landX - joven.x) + Math.abs(landY - joven.y) : 0;
+                        const cornerBonus = (Math.min(landX, SIZE-1-landX) <= 1 ? 2 : 0) +
+                                           (Math.min(landY, SIZE-1-landY) <= 1 ? 2 : 0);
+
+                        // Score: PRIORIZAR posiciones trampa para H
+                        let score = trapScore * 10; // Mucho peso a posiciones atrapadas
+                        score += cornerBonus * 3;   // Esquinas también son buenas
+                        score += distToJoven;       // Alejarlo del Joven
+                        score += dist;              // Más lejos = más daño de caída
+
+                        // BONUS ENORME si es H y la posición tiene 3+ direcciones bloqueadas
+                        if(carryTarget.id === 'H' && trapScore >= 3) {
+                            score += 50; // Prioridad máxima: dejar a H sin opciones
+                            log(`👿 La Diabla ve una trampa perfecta para ${carryTarget.name}...`, 'log-dmg');
+                        }
+
+                        if(score > bestThrowScore) {
+                            bestThrow = {x: landX, y: landY, dist: dist, trapScore: trapScore};
+                            bestThrowScore = score;
+                        }
+                    }
+                }
+            }
+
+            if(bestThrow) {
+                carryTarget.x = bestThrow.x;
+                carryTarget.y = bestThrow.y;
+
+                // Mensaje especial si lo dejó atrapado
+                if(bestThrow.trapScore >= 3) {
+                    log(`👿😈 La Diabla LANZA a ${carryTarget.name} a una TRAMPA! (${bestThrow.trapScore}/4 bloqueado)`, 'log-dmg');
+                } else {
+                    log(`👿 La Diabla LANZA a ${carryTarget.name} ${bestThrow.dist} casillas!`, 'log-dmg');
+                }
+
+                // Daño por caída (más distancia = más daño)
+                const fallDmg = 200000 * bestThrow.dist;
+                applyDamage(carryTarget, fallDmg, "Lanzamiento infernal", diabla);
+            }
+            diabla.carried = null;
+            paUsed += 2;
+        }
+    }
+
+    // === FASE 7: PLACAJE AL JOVEN (cuerpo a cuerpo, quita PM, cuesta 2 PA) ===
+    const jovenAdjacent = alivePlayers.find(pl =>
+        pl.id === 'K' && Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+    );
+
+    if(jovenAdjacent && paUsed + 2 <= maxPA) {
+        const placajeDmg = 400000 + Math.random() * 200000;
+        applyDamage(jovenAdjacent, placajeDmg, "Placaje infernal", diabla);
+        jovenAdjacent.pmPenalty = (jovenAdjacent.pmPenalty || 0) + 2;
+        log(`👿 ¡PLACAJE! ${jovenAdjacent.name} pierde 2 PM!`, 'log-dmg');
+        paUsed += 2;
+    }
+
+    // === FASE 8: EMPUJAR (a cualquiera adyacente, cuesta 2 PA) ===
+    const adjacentPlayers = alivePlayers.filter(pl =>
+        Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+    );
+
+    while(adjacentPlayers.length > 0 && paUsed + 2 <= maxPA) {
+        // Priorizar empujar al Joven hacia muros
+        const pushTarget = adjacentPlayers.find(pl => pl.id === 'K') || adjacentPlayers[0];
+        const dx = pushTarget.x - diabla.x;
+        const dy = pushTarget.y - diabla.y;
+
+        // Empujar 2 casillas
+        let pushed = 0;
+        let collision = false;
+        for(let i = 1; i <= 2; i++) {
+            const nx = pushTarget.x + dx * i;
+            const ny = pushTarget.y + dy * i;
+            if(nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE &&
+               map[ny][nx] === 0 && !getEntityAt(nx, ny)) {
+                pushed = i;
+            } else {
+                // Colisión
+                collision = true;
+                const collisionDmg = 300000 + Math.random() * 200000;
+                applyDamage(pushTarget, collisionDmg, "Empujón infernal (colisión)", diabla);
+                break;
+            }
+        }
+        if(pushed > 0) {
+            pushTarget.x += dx * pushed;
+            pushTarget.y += dy * pushed;
+            log(`👿 La Diabla empuja a ${pushTarget.name} ${pushed} casillas!`, 'log-dmg');
+        }
+        paUsed += 2;
+
+        // Actualizar lista de adyacentes
+        const stillAdjacent = alivePlayers.filter(pl =>
+            Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+        );
+        if(stillAdjacent.length === adjacentPlayers.length) break; // Evitar loop infinito
+        adjacentPlayers.length = 0;
+        adjacentPlayers.push(...stillAdjacent);
+    }
+
+    // === FASE 9: PUÑO DEMONÍACO (cuerpo a cuerpo, cuesta 3 PA) ===
+    // Puede atacar múltiples veces si tiene PA
+    // Prioridad: Alemán > H > Joven (acabar con el que más daño hace primero)
+    while(paUsed + 3 <= maxPA) {
+        const meleeTargets = alivePlayers.filter(pl =>
+            Math.abs(diabla.x - pl.x) + Math.abs(diabla.y - pl.y) === 1
+        );
+
+        if(meleeTargets.length === 0) break;
+
+        // Priorizar: Alemán primero, luego H, luego el Joven
+        const punchTarget = meleeTargets.find(pl => pl.id === 'A') ||
+                           meleeTargets.find(pl => pl.id === 'H') ||
+                           meleeTargets.find(pl => pl.id === 'K') ||
+                           meleeTargets[0];
+        let baseDmg = config.baseDmgMin + Math.random() * (config.baseDmgMax - config.baseDmgMin);
+
+        // Furia: daño x2
+        if(isFury) {
+            baseDmg *= 2;
+            log(`🔥 ¡PUÑO FURIOSO! Daño x2!`, 'log-dmg');
+        }
+
+        applyDamage(punchTarget, baseDmg, "Puño Demoníaco", diabla);
+        paUsed += 3;
+    }
+
+    turnCounter++;
+}
+
+// Ataque de Ira: daña todas las cardinales y diagonales (no atraviesa obstáculos)
+function diablaIraAttack(diabla) {
+    log(`👿🔥 ¡¡ATAQUE DE IRA!! 🔥👿`, 'log-dmg');
+    AudioManager.playSFX('critico');
+
+    const directions = [
+        {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}, // Cardinales
+        {dx: 1, dy: 1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: -1, dy: -1} // Diagonales
+    ];
+
+    const affectedCells = [];
+    const config = levelConfig[currentLevel];
+    const iraDmg = config.baseDmgMin * 0.7 + Math.random() * config.baseDmgMin * 0.3;
+
+    // Para cada dirección, avanzar hasta encontrar obstáculo
+    directions.forEach(dir => {
+        for(let i = 1; i < SIZE; i++) {
+            const nx = diabla.x + dir.dx * i;
+            const ny = diabla.y + dir.dy * i;
+
+            // Fuera del mapa o muro = parar
+            if(nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE || map[ny][nx] === 1) {
+                break;
+            }
+
+            affectedCells.push({x: nx, y: ny});
+
+            // Verificar si hay jugador en esta casilla
+            const target = players.find(pl => pl.x === nx && pl.y === ny && pl.hp > 0);
+            if(target) {
+                applyDamage(target, iraDmg, "Ira de la Diabla", diabla);
+            }
+        }
+    });
+
+    // Efecto visual: marcar casillas con fuego (parpadeo notable)
+    affectedCells.forEach((cell, idx) => {
+        // Delay escalonado para efecto de propagación
+        setTimeout(() => {
+            const cellEl = document.querySelector(`#grid .cell:nth-child(${cell.y * SIZE + cell.x + 1})`);
+            if(cellEl) {
+                cellEl.classList.add('on-fire');
+            }
+        }, idx * 30); // Efecto de onda expansiva
+    });
+
+    // Quitar el fuego después de que el jugador lo vea bien (1.5 segundos)
+    setTimeout(() => {
+        affectedCells.forEach(cell => {
+            const cellEl = document.querySelector(`#grid .cell:nth-child(${cell.y * SIZE + cell.x + 1})`);
+            if(cellEl) {
+                cellEl.classList.remove('on-fire');
+            }
+        });
+    }, 1500);
+}
+
+// Invocar un fueguito
+function diablaSpawnFueguito(diabla) {
+    // Buscar casilla vacía adyacente a la Diabla
+    const adjacent = [
+        {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0},
+        {dx: 1, dy: 1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: -1, dy: -1}
+    ];
+
+    for(const dir of adjacent) {
+        const nx = diabla.x + dir.dx;
+        const ny = diabla.y + dir.dy;
+
+        if(nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE &&
+           map[ny][nx] === 0 && !getEntityAt(nx, ny)) {
+            const fueguitoId = 'FUEGO' + Date.now();
+            fueguitos.push({
+                id: fueguitoId,
+                name: '🔥 Fueguito',
+                x: nx,
+                y: ny,
+                turnsToExplode: 1 // Explota en el próximo turno enemigo
+            });
+            log(`👿 La Diabla invoca un Fueguito en (${nx},${ny})!`, 'log-dmg');
+            break;
+        }
+    }
+}
+
+// Procesar explosión de fueguitos
+function processFueguitos() {
+    if(fueguitos.length === 0) return;
+
+    const toExplode = [...fueguitos];
+    fueguitos = []; // Limpiar todos (explotan todos)
+
+    toExplode.forEach(fuego => {
+        log(`🔥💥 ¡Fueguito EXPLOTA en (${fuego.x},${fuego.y})!`, 'log-dmg');
+
+        // Afecta a todos los adyacentes (cardinales)
+        const adjacent = [
+            {dx: 0, dy: 0}, // La propia casilla
+            {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
+        ];
+
+        adjacent.forEach(dir => {
+            const tx = fuego.x + dir.dx;
+            const ty = fuego.y + dir.dy;
+
+            const target = players.find(pl => pl.x === tx && pl.y === ty && pl.hp > 0);
+            if(target) {
+                // Daño por explosión
+                const explosionDmg = 200000 + Math.random() * 150000;
+                applyDamage(target, explosionDmg, "Explosión de Fueguito", {name: '🔥 Fueguito', id: 'FUEGO'});
+
+                // Quitar 1 PA
+                target.paPenalty = (target.paPenalty || 0) + 1;
+                log(`${target.name} pierde 1 PA por la explosión!`, 'log-dmg');
+
+                // Empujar 1 casilla (alejándose del fueguito)
+                if(dir.dx !== 0 || dir.dy !== 0) {
+                    const pushX = target.x + dir.dx;
+                    const pushY = target.y + dir.dy;
+                    if(pushX >= 0 && pushX < SIZE && pushY >= 0 && pushY < SIZE &&
+                       map[pushY][pushX] === 0 && !getEntityAt(pushX, pushY)) {
+                        target.x = pushX;
+                        target.y = pushY;
+                        log(`${target.name} es empujado por la explosión!`, 'log-dmg');
+                    } else {
+                        // Colisión
+                        const collisionDmg = 150000;
+                        applyDamage(target, collisionDmg, "Colisión por explosión", {name: '🔥 Fueguito', id: 'FUEGO'});
+                    }
+                }
+            }
+        });
+
+        // Efecto visual
+        const cellEl = document.querySelector(`#grid .cell:nth-child(${fuego.y * SIZE + fuego.x + 1})`);
+        if(cellEl) {
+            cellEl.classList.add('on-fire');
+            setTimeout(() => cellEl.classList.remove('on-fire'), 500);
+        }
+    });
+
+    draw();
+}
+
 function startEnemyTurn() {
     enemyTurnActive = true; resetActions();
-    log("Turno de los Escotes... ¡Cerrando cuentas!");
+    const config = levelConfig[currentLevel];
+
+    if(config.isBoss) {
+        log("👿 Turno de La Diabla... ¡Prepárense!");
+    } else {
+        log("Turno de los Escotes... ¡Cerrando cuentas!");
+    }
     draw();
 
     setTimeout(() => {
+        // Primero: hacer explotar fueguitos
+        processFueguitos();
+
         // Copiar array para evitar problemas si se elimina un Escote durante la iteración
         const activeEnemies = enemies.filter(e => e.hp > 0);
         activeEnemies.forEach(e => {
+            // Si es la Diabla, usar IA especial
+            if(e.isBoss) {
+                actDiabla(e);
+                return;
+            }
             if(e.hp <= 0) return; // Verificar de nuevo por si murió
             const alivePlayers = players.filter(pl => pl.hp > 0);
             if(alivePlayers.length === 0) return;
@@ -1441,7 +2122,7 @@ function commandUva(target) {
 
     const joven = players.find(pl => pl.id === 'K');
     const isEvolved = joven && (joven.hp / joven.maxHp) < 0.30;
-    const isEnemy = target.id.includes('D');
+    const isEnemy = isEnemyEntity(target);
     const isAlly = players.includes(target);
 
     // Si Uva está evolucionada y el objetivo es un aliado, no hacer nada
@@ -1607,7 +2288,7 @@ function actUva() {
     }
 
     const target = adjacent[Math.floor(Math.random() * adjacent.length)];
-    const isEnemy = target.id.includes('D');
+    const isEnemy = isEnemyEntity(target);
 
     // MORDIDA INSTAKILL - muy rara (5% probabilidad, solo a enemigos)
     if (isEnemy && Math.random() < 0.05) {
